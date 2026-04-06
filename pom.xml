@@ -32,7 +32,7 @@
         <spring-cloud.version>2023.0.0</spring-cloud.version>
 
         <!-- Blockchain -->
-        <web3j.version>4.11.0</web3j.version>
+        <web3j.version>5.0.2</web3j.version>
 
         <!-- Message Queue -->
         <kafka.version>3.7.0</kafka.version>
@@ -43,7 +43,7 @@
 
         <!-- Utilities -->
         <lombok.version>1.18.30</lombok.version>
-        <mapstruct.version>1.5.5</mapstruct.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
     </properties>
 
     <dependencyManagement>

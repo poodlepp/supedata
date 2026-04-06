@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Annotation profile for DEX Aggregator Platform" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct-processor/1.5.5/mapstruct-processor-1.5.5.jar" />
+        </processorPath>
+        <module name="dex-blockchain" />
+        <module name="dex-common" />
+        <module name="dex-scheduler" />
+        <module name="dex-data" />
+        <module name="dex-api" />
+        <module name="dex-monitor" />
+        <module name="dex-business" />
+      </profile>
+    </annotationProcessing>
+  </component>
+</project>
