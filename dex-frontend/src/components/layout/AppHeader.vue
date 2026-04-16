@@ -8,6 +8,7 @@
         <router-link to="/dashboard">Dashboard</router-link>
         <router-link to="/monitor">Monitor</router-link>
         <router-link to="/route">Route Demo</router-link>
+        <router-link to="/blockchain">Blockchain Demo</router-link>
       </nav>
     </div>
   </header>

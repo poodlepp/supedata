@@ -13,7 +13,7 @@
 
     <artifactId>dex-business</artifactId>
     <name>DEX Business Module</name>
-    <description>业务逻辑模块 - 价格计算、路由优化、流动性分析</description>
+    <description>业务逻辑模块 - 价格计算、流动性管理、路由优化</description>
 
     <dependencies>
         <dependency>
@@ -25,6 +25,12 @@
         <dependency>
             <groupId>com.dex</groupId>
             <artifactId>dex-data</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.dex</groupId>
+            <artifactId>dex-infrastructure</artifactId>
             <version>1.0.0</version>
         </dependency>
 

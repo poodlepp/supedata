@@ -7,6 +7,19 @@
           <p>首页随机展示后端返回的数据，验证前后端联通</p>
         </div>
 
+        <div class="section entry-section">
+          <h2>功能入口</h2>
+          <div class="entry-card">
+            <div>
+              <div class="entry-title">区块链监听演示</div>
+              <div class="entry-desc">进入 Sepolia 区块链页面，查看连接状态、最新区块和 ETH/USDT 实时监听演示。</div>
+            </div>
+            <router-link class="entry-link" to="/blockchain">
+              <el-button type="primary" size="large">进入 Blockchain 页面</el-button>
+            </router-link>
+          </div>
+        </div>
+
         <div class="section spotlight-section">
           <h2>随机抽样 · 来自后端接口</h2>
           <el-row :gutter="20">
@@ -189,6 +202,38 @@ onBeforeUnmount(() => {
   margin-bottom: 20px;
   border-bottom: 2px solid #409eff;
   padding-bottom: 10px;
+}
+
+.entry-section {
+  margin-bottom: 32px;
+}
+
+.entry-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, #ecf5ff 0%, #f4f9ff 100%);
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 18px;
+}
+
+.entry-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2d3d;
+  margin-bottom: 8px;
+}
+
+.entry-desc {
+  font-size: 14px;
+  color: #607085;
+  line-height: 1.7;
+}
+
+.entry-link {
+  flex-shrink: 0;
 }
 
 .spotlight-section {

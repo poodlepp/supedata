@@ -52,6 +52,10 @@
             <artifactId>core</artifactId>
             <exclusions>
                 <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+                <exclusion>
                     <groupId>tech.pegasys</groupId>
                     <artifactId>jc-kzg-4844</artifactId>
                 </exclusion>

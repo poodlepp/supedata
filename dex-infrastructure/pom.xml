@@ -13,7 +13,7 @@
 
     <artifactId>dex-infrastructure</artifactId>
     <name>DEX Infrastructure Module</name>
-    <description>基础设施模块 - 定时任务调度、监控、健康检查</description>
+    <description>基础设施模块 - 定时任务调度、监控、健康检查、区块链集成</description>
 
     <dependencies>
         <dependency>
@@ -41,6 +41,18 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Web3j for Blockchain Integration -->
+        <dependency>
+            <groupId>org.web3j</groupId>
+            <artifactId>core</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
