@@ -5,7 +5,8 @@ import Monitor from '../views/Monitor.vue'
 import RouteDemo from '../views/RouteDemo.vue'
 
 const routes = [
-  { path: '/', component: Portfolio },
+  { path: '/', component: Dashboard },
+  { path: '/portfolio', component: Portfolio },
   { path: '/dashboard', component: Dashboard },
   { path: '/monitor', component: Monitor },
   { path: '/route', component: RouteDemo }

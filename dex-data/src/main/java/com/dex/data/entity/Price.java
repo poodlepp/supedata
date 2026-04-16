@@ -4,15 +4,16 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * 区块实体
- */
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Block {
+public class Price {
     private Long id;
-    private Long blockNumber;
-    private String blockHash;
+    private String pair;
+    private BigDecimal price;
     private Long timestamp;
+    private LocalDateTime createdAt;
 }

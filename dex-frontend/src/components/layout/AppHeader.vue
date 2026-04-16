@@ -3,7 +3,8 @@
     <div class="header-content">
       <h1>DEX Aggregator</h1>
       <nav>
-        <router-link to="/">Portfolio</router-link>
+        <router-link to="/">Home</router-link>
+        <router-link to="/portfolio">Portfolio</router-link>
         <router-link to="/dashboard">Dashboard</router-link>
         <router-link to="/monitor">Monitor</router-link>
         <router-link to="/route">Route Demo</router-link>

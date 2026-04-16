@@ -1,0 +1,53 @@
+-- Create database
+CREATE DATABASE IF NOT EXISTS dex_db;
+USE dex_db;
+
+-- Create tables for minimal demo
+CREATE TABLE IF NOT EXISTS prices (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  pair VARCHAR(50) NOT NULL,
+  price DECIMAL(20, 8) NOT NULL,
+  timestamp BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_pair_timestamp (pair, timestamp)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS routes (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  from_token VARCHAR(50) NOT NULL,
+  to_token VARCHAR(50) NOT NULL,
+  path JSON NOT NULL,
+  best_price DECIMAL(20, 8) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS liquidity_pools (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  pool_address VARCHAR(100) NOT NULL UNIQUE,
+  token0 VARCHAR(50) NOT NULL,
+  token1 VARCHAR(50) NOT NULL,
+  reserve0 DECIMAL(30, 8) NOT NULL,
+  reserve1 DECIMAL(30, 8) NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS blocks (
+  id BIGINT PRIMARY KEY,
+  block_number BIGINT UNIQUE,
+  block_hash VARCHAR(255),
+  timestamp BIGINT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Insert sample data
+INSERT INTO prices (pair, price, timestamp) VALUES
+('ETH-USDC', 2500.50, UNIX_TIMESTAMP() * 1000),
+('BTC-USDC', 45000.00, UNIX_TIMESTAMP() * 1000),
+('DAI-USDC', 1.00, UNIX_TIMESTAMP() * 1000);
+
+INSERT INTO routes (from_token, to_token, path, best_price) VALUES
+('ETH', 'USDC', '["ETH", "USDC"]', 2500.50),
+('BTC', 'USDC', '["BTC", "USDC"]', 45000.00);
+
+INSERT INTO liquidity_pools (pool_address, token0, token1, reserve0, reserve1) VALUES
+('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8', 'USDC', 'ETH', 1000000, 400),
+('0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11', 'DAI', 'ETH', 1000000, 400);

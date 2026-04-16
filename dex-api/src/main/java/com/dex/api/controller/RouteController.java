@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 public class RouteController {
 
     @GetMapping("/best")
-    public ApiResponse<?> getBestRoute(@RequestParam String from, @RequestParam String to) {
+    public ApiResponse<?> getBestRoute(@RequestParam("from") String from, @RequestParam("to") String to) {
         // TODO: 实现获取最优路由
         return ApiResponse.success(null);
     }

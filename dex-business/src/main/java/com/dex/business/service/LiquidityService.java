@@ -1,24 +1,30 @@
 package com.dex.business.service;
 
-import java.math.BigDecimal;
+import com.dex.data.entity.LiquidityPool;
+import com.dex.data.repository.LiquidityPoolRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
 
 /**
  * 流动性分析服务
  */
+@Service
+@RequiredArgsConstructor
 public class LiquidityService {
+    private final LiquidityPoolRepository liquidityPoolRepository;
 
-    public BigDecimal calculateTVL(String pool) {
-        // TODO: 实现TVL计算
-        return null;
+    public Optional<LiquidityPool> getPoolByAddress(String poolAddress) {
+        return Optional.ofNullable(liquidityPoolRepository.findByPoolAddress(poolAddress));
     }
 
-    public BigDecimal calculateAPY(String pool) {
-        // TODO: 实现APY计算
-        return null;
+    public List<LiquidityPool> getPoolsByTokenPair(String token0, String token1) {
+        return liquidityPoolRepository.findByToken0AndToken1(token0, token1);
     }
 
-    public String getLiquidityInfo(String pool) {
-        // TODO: 实现获取流动性信息
-        return null;
+    public List<LiquidityPool> getAllPools() {
+        return liquidityPoolRepository.findAll();
     }
 }
