@@ -7,10 +7,8 @@
           <value>
             <TabSessionState>
               <option name="provider" value="claude" />
-              <option name="sessionId" value="dca7dcbe-eba2-47d3-b91c-3f11d13f3210" />
-              <option name="cwd" value="$PROJECT_DIR$" />
               <option name="model" value="claude-haiku-4-5" />
-              <option name="permissionMode" value="plan" />
+              <option name="permissionMode" value="bypassPermissions" />
               <option name="reasoningEffort" value="medium" />
             </TabSessionState>
           </value>

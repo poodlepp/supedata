@@ -48,6 +48,17 @@
         </dependency>
 
         <dependency>
+            <groupId>org.web3j</groupId>
+            <artifactId>core</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>tech.pegasys</groupId>
+                    <artifactId>jc-kzg-4844</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>

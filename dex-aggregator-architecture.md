@@ -1,5 +1,8 @@
 # DEX数据聚合平台 - 顶层架构设计
 
+> **最后更新**: 2026-04-16  
+> **模块重构**: 从7个模块优化到5个模块（dex-blockchain合并到dex-data，dex-scheduler和dex-monitor合并到dex-infrastructure）
+
 ## 一、技术栈选型
 
 ### 核心框架版本
@@ -43,21 +46,7 @@ dex-aggregator/
 │   │       └── config/              # 通用配置
 │   └── src/main/resources/
 │
-├── dex-blockchain/                  # 区块链交互模块
-│   ├── pom.xml
-│   ├── src/main/java/
-│   │   └── com/dex/blockchain/
-│   │       ├── config/              # Web3j配置
-│   │       ├── service/             # 链交互服务
-│   │       │   ├── Web3jService.java
-│   │       │   ├── BlockchainService.java
-│   │       │   └── EventListenerService.java
-│   │       ├── client/              # RPC客户端
-│   │       ├── contract/            # 合约交互
-│   │       └── model/               # 区块链数据模型
-│   └── src/main/resources/
-│
-├── dex-data/                        # 数据层模块
+├── dex-data/                        # 数据层模块（包含区块链交互）
 │   ├── pom.xml
 │   ├── src/main/java/
 │   │   └── com/dex/data/
@@ -67,6 +56,12 @@ dex-aggregator/
 │   │       │   ├── BlockScanService.java
 │   │       │   ├── EventProcessService.java
 │   │       │   └── DataCacheService.java
+│   │       ├── blockchain/          # 区块链交互（原dex-blockchain）
+│   │       │   ├── config/          # Web3j配置
+│   │       │   └── service/         # 链交互服务
+│   │       │       ├── BlockchainService.java
+│   │       │       ├── ContractService.java
+│   │       │       └── EventListenerService.java
 │   │       └── mapper/              # MyBatis/MapStruct映射
 │   └── src/main/resources/
 │       └── db/migration/            # Flyway数据库迁移
@@ -101,22 +96,21 @@ dex-aggregator/
 │   │   └── logback-spring.xml       # 日志配置
 │   └── src/test/java/
 │
-├── dex-scheduler/                   # 定时任务模块
-│   ├── pom.xml
-│   ├── src/main/java/
-│   │   └── com/dex/scheduler/
-│   │       ├── task/                # 定时任务
-│   │       ├── config/              # 调度配置
-│   │       └── listener/            # 任务监听
-│   └── src/main/resources/
-│
-└── dex-monitor/                     # 监控模块
+└── dex-infrastructure/              # 基础设施模块（定时任务+监控）
     ├── pom.xml
     ├── src/main/java/
-    │   └── com/dex/monitor/
-    │       ├── metrics/             # Prometheus指标
-    │       ├── health/              # 健康检查
-    │       └── config/              # 监控配置
+    │   └── com/dex/infrastructure/
+    │       ├── scheduler/           # 定时任务（原dex-scheduler）
+    │       │   ├── config/          # 调度配置
+    │       │   └── task/            # 定时任务
+    │       │       ├── BlockScanTask.java
+    │       │       ├── PriceCacheTask.java
+    │       │       ├── HealthCheckTask.java
+    │       │       └── StatisticsTask.java
+    │       └── monitor/             # 监控（原dex-monitor）
+    │           ├── config/          # 监控配置
+    │           ├── metrics/         # Prometheus指标
+    │           └── health/          # 健康检查
     └── src/main/resources/
 ```
 
@@ -147,32 +141,20 @@ dex-aggregator/
 
 ## 四、核心模块设计
 
-### 1. dex-blockchain（区块链交互）
-**职责**：Web3j集成、RPC调用、合约交互、事件监听
+### 1. dex-data（数据层 + 区块链交互）
+**职责**：数据持久化、缓存管理、区块扫描、Web3j集成、RPC调用、合约交互、事件监听
 
 **关键类**：
-- `Web3jConfig`：Web3j连接池配置
-- `BlockchainService`：区块链基础服务
-- `ContractService`：合约调用封装
-- `EventListenerService`：事件监听和处理
-
-**依赖**：
-```xml
-<dependency>
-    <groupId>org.web3j</groupId>
-    <artifactId>core</artifactId>
-    <version>4.11.0</version>
-</dependency>
-```
-
-### 2. dex-data（数据层）
-**职责**：数据持久化、缓存管理、区块扫描
-
-**关键类**：
-- `BlockScanService`：区块扫描（增量同步、断点续传）
-- `EventProcessService`：事件解析和存储
-- `DataCacheService`：Redis缓存管理
-- `Repository`：数据访问对象
+- **数据访问层**：
+  - `BlockScanService`：区块扫描（增量同步、断点续传）
+  - `EventProcessService`：事件解析和存储
+  - `DataCacheService`：Redis缓存管理
+  - `Repository`：数据访问对象
+- **区块链交互层**：
+  - `Web3jConfig`：Web3j连接池配置
+  - `BlockchainService`：区块链基础服务
+  - `ContractService`：合约调用封装
+  - `EventListenerService`：事件监听和处理
 
 **依赖**：
 ```xml
@@ -189,9 +171,14 @@ dex-aggregator/
     <artifactId>mysql-connector-java</artifactId>
     <version>8.0.33</version>
 </dependency>
+<dependency>
+    <groupId>org.web3j</groupId>
+    <artifactId>core</artifactId>
+    <version>5.0.2</version>
+</dependency>
 ```
 
-### 3. dex-business（业务逻辑）
+### 2. dex-business（业务逻辑）
 **职责**：价格计算、路由优化、流动性分析、统计计算
 
 **关键类**：
@@ -216,14 +203,35 @@ GET  /api/v1/statistics/volume          # 获取交易量统计
 WS   /ws/prices                         # WebSocket价格推送
 ```
 
-### 5. dex-scheduler（定时任务）
-**职责**：定时扫描、数据更新、缓存刷新
+### 5. dex-infrastructure（基础设施 - 定时任务 + 监控）
+**职责**：定时扫描、数据更新、缓存刷新、监控指标、健康检查
 
-**关键任务**：
+**关键任务**（Scheduler）：
 - 区块扫描任务（每12秒）
 - 价格缓存更新（每30秒）
 - 统计数据计算（每分钟）
 - 健康检查（每5秒）
+
+**关键指标**（Monitor）：
+- Prometheus指标收集
+- 自定义健康检查
+- 应用监控配置
+
+**依赖**：
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-quartz</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-registry-prometheus</artifactId>
+</dependency>
+```
 
 ---
 
@@ -545,7 +553,54 @@ curl http://localhost:8080/actuator/health
 
 ---
 
-## 十三、后续扩展方向
+## 十三、模块依赖关系（重构后）
+
+### 依赖图
+```
+dex-common (基础模块)
+    ↑
+    ├── dex-data (数据层，包含blockchain)
+    │   └── dex-common
+    │
+    ├── dex-business (业务逻辑)
+    │   ├── dex-data
+    │   └── dex-common
+    │
+    ├── dex-infrastructure (基础设施，包含scheduler+monitor)
+    │   ├── dex-data
+    │   └── dex-common
+    │
+    └── dex-api (API服务，启动类)
+        ├── dex-business
+        ├── dex-infrastructure
+        └── dex-common
+```
+
+### 模块职责清单
+
+| 模块 | 文件数 | 职责 | 依赖 |
+|------|--------|------|------|
+| dex-common | 3 | 通用基础（常量、异常、响应模型） | 无 |
+| dex-data | 9 | 数据层 + 区块链交互 | dex-common |
+| dex-business | 4 | 业务逻辑（价格、路由、流动性、统计） | dex-data, dex-common |
+| dex-infrastructure | 8 | 基础设施（定时任务 + 监控） | dex-data, dex-common |
+| dex-api | 6 | REST API服务（启动类） | dex-business, dex-infrastructure, dex-common |
+
+### 模块重构说明
+
+**2026-04-16 重构内容**：
+- ✅ **dex-blockchain 合并到 dex-data**：区块链交互是数据获取的一部分，减少模块数量
+- ✅ **dex-scheduler + dex-monitor 合并到 dex-infrastructure**：两个模块都是基础设施性质，合并后职责更清晰
+- ✅ **更新所有 pom.xml**：确保依赖关系正确，添加必要的库依赖
+
+**优势**：
+- 模块数量从7个减少到5个（28.6%）
+- 依赖关系更清晰，便于维护
+- 为未来微服务拆分做好准备
+
+---
+
+## 十四、后续扩展方向
 
 1. **多链支持**：抽象Chain接口，支持BSC、Polygon等
 2. **GraphQL API**：补充REST API，提供灵活查询

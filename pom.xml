@@ -14,12 +14,10 @@
 
     <modules>
         <module>dex-common</module>
-        <module>dex-blockchain</module>
         <module>dex-data</module>
         <module>dex-business</module>
         <module>dex-api</module>
-        <module>dex-scheduler</module>
-        <module>dex-monitor</module>
+        <module>dex-infrastructure</module>
     </modules>
 
     <properties>
