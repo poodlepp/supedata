@@ -9,6 +9,7 @@
         <router-link to="/monitor">Monitor</router-link>
         <router-link to="/route">Route Demo</router-link>
         <router-link to="/blockchain">Blockchain Demo</router-link>
+        <router-link to="/univ3">Uniswap V3</router-link>
       </nav>
     </div>
   </header>

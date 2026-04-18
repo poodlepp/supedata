@@ -9,14 +9,26 @@
 
         <div class="section entry-section">
           <h2>功能入口</h2>
-          <div class="entry-card">
-            <div>
-              <div class="entry-title">区块链监听演示</div>
-              <div class="entry-desc">进入 Sepolia 区块链页面，查看连接状态、最新区块和 ETH/USDT 实时监听演示。</div>
+          <div class="entry-grid">
+            <div class="entry-card">
+              <div>
+                <div class="entry-title">区块链监听演示</div>
+                <div class="entry-desc">进入 Sepolia 区块链页面，查看连接状态、最新区块和 ETH/USDT 实时监听演示。</div>
+              </div>
+              <router-link class="entry-link" to="/blockchain">
+                <el-button type="primary" size="large">进入 Blockchain 页面</el-button>
+              </router-link>
             </div>
-            <router-link class="entry-link" to="/blockchain">
-              <el-button type="primary" size="large">进入 Blockchain 页面</el-button>
-            </router-link>
+
+            <div class="entry-card entry-card-dark">
+              <div>
+                <div class="entry-title">Uniswap V3 扫链数据</div>
+                <div class="entry-desc">进入独立页面查看 WETH/USDC 0.05% Pool 的扫链进度、事件分布和最近事件列表。</div>
+              </div>
+              <router-link class="entry-link" to="/univ3">
+                <el-button type="success" size="large">进入 Uniswap V3 页面</el-button>
+              </router-link>
+            </div>
           </div>
         </div>
 
@@ -208,6 +220,12 @@ onBeforeUnmount(() => {
   margin-bottom: 32px;
 }
 
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
 .entry-card {
   display: flex;
   justify-content: space-between;
@@ -217,6 +235,19 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, #ecf5ff 0%, #f4f9ff 100%);
   border: 1px solid rgba(64, 158, 255, 0.2);
   border-radius: 18px;
+}
+
+.entry-card-dark {
+  background: linear-gradient(135deg, #0f172a 0%, #18263b 100%);
+  border: 1px solid rgba(110, 168, 255, 0.18);
+}
+
+.entry-card-dark .entry-title {
+  color: #f8fafc;
+}
+
+.entry-card-dark .entry-desc {
+  color: #c4d1e1;
 }
 
 .entry-title {
@@ -306,5 +337,16 @@ onBeforeUnmount(() => {
   font-weight: bold;
   color: #333;
   margin: 20px 0;
+}
+
+@media (max-width: 900px) {
+  .entry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .entry-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

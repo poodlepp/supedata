@@ -26,9 +26,13 @@ spring:
     producer:
       acks: all
       retries: 3
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       group-id: dex-aggregator
       auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 mybatis:
   configuration:
@@ -50,6 +54,17 @@ blockchain:
     ws-url: ${MAINNET_WS_URL:wss://mainnet.infura.io/ws/v3/c4d9767c95884ede9a0613c02eca0870}
     chain-id: 1
     network-name: Ethereum Mainnet
+  univ3:
+    enabled: true
+    pool-address: ${UNIV3_POOL_ADDRESS:0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640}
+    pool-name: ${UNIV3_POOL_NAME:Uniswap V3 WETH/USDC 0.05%}
+    lookback-blocks: ${UNIV3_LOOKBACK_BLOCKS:1000}
+    scan-chunk-size: ${UNIV3_SCAN_CHUNK_SIZE:50}
+    confirmations: ${UNIV3_CONFIRMATIONS:6}
+    reorg-window: ${UNIV3_REORG_WINDOW:12}
+    poll-interval-ms: ${UNIV3_POLL_INTERVAL_MS:5000}
+    initial-delay-ms: ${UNIV3_INITIAL_DELAY_MS:3000}
+    kafka-topic: ${UNIV3_KAFKA_TOPIC:dex.uniswap.v3.pool.blocks}
 
 logging:
   level:
@@ -60,3 +75,4 @@ logging:
 
 server:
   port: 8080
+
