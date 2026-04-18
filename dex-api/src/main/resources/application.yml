@@ -23,6 +23,8 @@ spring:
 
   kafka:
     bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: ${KAFKA_LISTENER_AUTO_STARTUP:false}
     producer:
       acks: all
       retries: 3
@@ -55,7 +57,7 @@ blockchain:
     chain-id: 1
     network-name: Ethereum Mainnet
   univ3:
-    enabled: true
+    enabled: ${UNIV3_ENABLED:false}
     pool-address: ${UNIV3_POOL_ADDRESS:0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640}
     pool-name: ${UNIV3_POOL_NAME:Uniswap V3 WETH/USDC 0.05%}
     lookback-blocks: ${UNIV3_LOOKBACK_BLOCKS:1000}

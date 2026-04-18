@@ -1,352 +1,115 @@
 <template>
   <div class="dashboard">
-    <el-container>
-      <el-main>
-        <div class="header">
-          <h1>DEX 聚合平台</h1>
-          <p>首页随机展示后端返回的数据，验证前后端联通</p>
+    <div class="hero">
+      <div>
+        <div class="eyebrow">DEX AGGREGATOR</div>
+        <h1>链上数据聚合与报价演示台</h1>
+        <p>前半阶段聚焦展示与验证：用更清晰的首页把价格、池子、阶段进度和功能入口串起来，方便开发、测试、部署后的快速验收。</p>
+      </div>
+      <div class="hero-badges">
+        <span>Stage 0-4 Ready</span>
+        <span>Vue 3 + Spring Boot</span>
+      </div>
+    </div>
+
+    <section class="quick-grid">
+      <router-link class="quick-card" to="/blockchain">
+        <div class="eyebrow">CHAIN READ</div>
+        <h2>主链监听</h2>
+        <p>查看连接状态、最新区块、ETH/USDT 和 Swap 事件流。</p>
+      </router-link>
+      <router-link class="quick-card" to="/univ3">
+        <div class="eyebrow">PROTOCOL INDEX</div>
+        <h2>UniV3 索引</h2>
+        <p>查看池子扫描进度、事件分布与最近事件。</p>
+      </router-link>
+      <router-link class="quick-card" to="/route">
+        <div class="eyebrow">ROUTING</div>
+        <h2>路径报价</h2>
+        <p>查看候选路径、gas、滑点与淘汰原因。</p>
+      </router-link>
+      <router-link class="quick-card" to="/monitor">
+        <div class="eyebrow">DELIVERY</div>
+        <h2>阶段看板</h2>
+        <p>对照架构文档第十部分查看落地进度。</p>
+      </router-link>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <div class="section-head">
+          <h2>价格快照</h2>
+          <span class="muted">最近更新：{{ formatTime(lastUpdated) }}</span>
         </div>
-
-        <div class="section entry-section">
-          <h2>功能入口</h2>
-          <div class="entry-grid">
-            <div class="entry-card">
-              <div>
-                <div class="entry-title">区块链监听演示</div>
-                <div class="entry-desc">进入 Sepolia 区块链页面，查看连接状态、最新区块和 ETH/USDT 实时监听演示。</div>
-              </div>
-              <router-link class="entry-link" to="/blockchain">
-                <el-button type="primary" size="large">进入 Blockchain 页面</el-button>
-              </router-link>
-            </div>
-
-            <div class="entry-card entry-card-dark">
-              <div>
-                <div class="entry-title">Uniswap V3 扫链数据</div>
-                <div class="entry-desc">进入独立页面查看 WETH/USDC 0.05% Pool 的扫链进度、事件分布和最近事件列表。</div>
-              </div>
-              <router-link class="entry-link" to="/univ3">
-                <el-button type="success" size="large">进入 Uniswap V3 页面</el-button>
-              </router-link>
-            </div>
+        <div class="price-grid">
+          <div v-for="price in prices" :key="price.pair" class="price-card">
+            <span>{{ price.pair }}</span>
+            <strong>${{ Number(price.price || 0).toFixed(2) }}</strong>
           </div>
         </div>
+      </article>
 
-        <div class="section spotlight-section">
-          <h2>随机抽样 · 来自后端接口</h2>
-          <el-row :gutter="20">
-            <el-col :xs="24" :md="12">
-              <el-card class="spotlight-card" shadow="hover">
-                <template #header>
-                  <div class="card-header">
-                    <span>随机价格</span>
-                    <span class="status-tag">API</span>
-                  </div>
-                </template>
-                <template v-if="featuredPrice">
-                  <div class="spotlight-title">{{ featuredPrice.pair }}</div>
-                  <div class="spotlight-value">${{ Number(featuredPrice.price).toFixed(2) }}</div>
-                  <div class="spotlight-meta">创建时间：{{ formatTime(featuredPrice.createdAt) }}</div>
-                </template>
-                <div v-else class="empty-text">暂无价格数据</div>
-              </el-card>
-            </el-col>
-
-            <el-col :xs="24" :md="12">
-              <el-card class="spotlight-card" shadow="hover">
-                <template #header>
-                  <div class="card-header">
-                    <span>随机流动性池</span>
-                    <span class="status-tag">API</span>
-                  </div>
-                </template>
-                <template v-if="featuredPool">
-                  <div class="spotlight-title">{{ featuredPool.token0 }} / {{ featuredPool.token1 }}</div>
-                  <div class="spotlight-meta">池地址：{{ featuredPool.poolAddress }}</div>
-                  <div class="spotlight-meta">Reserve0：{{ Number(featuredPool.reserve0).toFixed(2) }}</div>
-                  <div class="spotlight-meta">Reserve1：{{ Number(featuredPool.reserve1).toFixed(2) }}</div>
-                </template>
-                <div v-else class="empty-text">暂无流动性池数据</div>
-              </el-card>
-            </el-col>
-          </el-row>
-          <div class="fetch-time">最近一次拉取：{{ formatTime(lastUpdated) }}</div>
+      <article class="panel">
+        <div class="section-head">
+          <h2>阶段进度摘要</h2>
+          <span class="muted">已完成 {{ doneStages }}/{{ totalStages }}</span>
         </div>
-
-        <div class="section">
-          <h2>实时价格</h2>
-          <el-row :gutter="20">
-            <el-col :xs="24" :sm="12" :md="8" v-for="price in prices" :key="price.id">
-              <el-card class="price-card">
-                <template #header>
-                  <div class="card-header">
-                    <span class="pair-name">{{ price.pair }}</span>
-                  </div>
-                </template>
-                <div class="price-value">${{ Number(price.price).toFixed(2) }}</div>
-                <div class="price-time">{{ formatTime(price.createdAt) }}</div>
-              </el-card>
-            </el-col>
-          </el-row>
+        <div class="stage-summary">
+          <div v-for="stage in stagePreview" :key="stage.code" class="stage-pill" :class="stage.done ? 'done' : ''">
+            <strong>{{ stage.code }}</strong>
+            <span>{{ stage.name }}</span>
+          </div>
         </div>
+      </article>
+    </section>
 
-        <div class="section">
-          <h2>流动性池</h2>
-          <el-table :data="pools" stripe>
-            <el-table-column prop="poolAddress" label="池地址" width="200" show-overflow-tooltip />
-            <el-table-column prop="token0" label="Token 0" width="100" />
-            <el-table-column prop="token1" label="Token 1" width="100" />
-            <el-table-column prop="reserve0" label="储备 0" width="150">
-              <template #default="{ row }">
-                {{ Number(row.reserve0).toFixed(2) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="reserve1" label="储备 1" width="150">
-              <template #default="{ row }">
-                {{ Number(row.reserve1).toFixed(2) }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-main>
-    </el-container>
+    <section class="panel">
+      <div class="section-head">
+        <h2>流动性池</h2>
+      </div>
+      <el-table :data="pools" stripe>
+        <el-table-column prop="poolAddress" label="池地址" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="token0" label="Token 0" width="120" />
+        <el-table-column prop="token1" label="Token 1" width="120" />
+        <el-table-column prop="reserve0" label="Reserve 0" width="140" />
+        <el-table-column prop="reserve1" label="Reserve 1" width="140" />
+      </el-table>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { getPrice } from '../api/price'
+import { computed, onMounted, ref } from 'vue'
 import { getLiquidity } from '../api/liquidity'
+import { getPrices } from '../api/price'
+import { getStageProgress } from '../api/statistics'
 
 const prices = ref([])
 const pools = ref([])
-const featuredPrice = ref(null)
-const featuredPool = ref(null)
+const progress = ref(null)
 const lastUpdated = ref(null)
-let refreshTimer = null
 
-const formatTime = (time) => {
-  if (!time) return '-'
-  return new Date(time).toLocaleString('zh-CN')
+const totalStages = computed(() => progress.value?.stages?.length || 0)
+const doneStages = computed(() => (progress.value?.stages || []).filter(item => item.done).length)
+const stagePreview = computed(() => progress.value?.stages?.slice(0, 6) || [])
+
+const formatTime = (value) => value ? new Date(value).toLocaleString('zh-CN') : '-'
+
+const loadDashboard = async () => {
+  const [priceRes, poolRes, progressRes] = await Promise.all([
+    getPrices(),
+    getLiquidity(),
+    getStageProgress()
+  ])
+  prices.value = priceRes.data.data || []
+  pools.value = poolRes.data.data || []
+  progress.value = progressRes.data.data || null
+  lastUpdated.value = Date.now()
 }
 
-const shuffleList = (list) => [...list].sort(() => Math.random() - 0.5)
-
-const pickRandomItem = (list) => {
-  if (!list.length) return null
-  return list[Math.floor(Math.random() * list.length)]
-}
-
-const loadPrices = async () => {
-  try {
-    const pairs = ['ETH-USDC', 'BTC-USDC', 'DAI-USDC']
-    const results = await Promise.all(pairs.map((pair) => getPrice(pair)))
-    const loadedPrices = results
-      .map((response) => response.data?.data)
-      .filter(Boolean)
-
-    prices.value = shuffleList(loadedPrices)
-    featuredPrice.value = pickRandomItem(loadedPrices)
-  } catch (error) {
-    console.error('Failed to load prices:', error)
-  }
-}
-
-const loadPools = async () => {
-  try {
-    const response = await getLiquidity()
-    const loadedPools = response.data?.data || []
-
-    pools.value = shuffleList(loadedPools)
-    featuredPool.value = pickRandomItem(loadedPools)
-  } catch (error) {
-    console.error('Failed to load pools:', error)
-  }
-}
-
-const refreshDashboard = async () => {
-  await Promise.all([loadPrices(), loadPools()])
-  lastUpdated.value = new Date().toISOString()
-}
-
-onMounted(() => {
-  refreshDashboard()
-  refreshTimer = setInterval(refreshDashboard, 30000)
-})
-
-onBeforeUnmount(() => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-  }
-})
+onMounted(loadDashboard)
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
-}
-
-.header {
-  margin-bottom: 40px;
-  text-align: center;
-}
-
-.header h1 {
-  font-size: 32px;
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.header p {
-  font-size: 16px;
-  color: #666;
-}
-
-.section {
-  margin-bottom: 40px;
-}
-
-.section h2 {
-  font-size: 20px;
-  color: #333;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #409eff;
-  padding-bottom: 10px;
-}
-
-.entry-section {
-  margin-bottom: 32px;
-}
-
-.entry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.entry-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  padding: 24px 28px;
-  background: linear-gradient(135deg, #ecf5ff 0%, #f4f9ff 100%);
-  border: 1px solid rgba(64, 158, 255, 0.2);
-  border-radius: 18px;
-}
-
-.entry-card-dark {
-  background: linear-gradient(135deg, #0f172a 0%, #18263b 100%);
-  border: 1px solid rgba(110, 168, 255, 0.18);
-}
-
-.entry-card-dark .entry-title {
-  color: #f8fafc;
-}
-
-.entry-card-dark .entry-desc {
-  color: #c4d1e1;
-}
-
-.entry-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1f2d3d;
-  margin-bottom: 8px;
-}
-
-.entry-desc {
-  font-size: 14px;
-  color: #607085;
-  line-height: 1.7;
-}
-
-.entry-link {
-  flex-shrink: 0;
-}
-
-.spotlight-section {
-  margin-bottom: 32px;
-}
-
-.spotlight-card {
-  border-radius: 16px;
-}
-
-.price-card {
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.price-card:hover {
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.status-tag {
-  font-size: 12px;
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.12);
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-
-.pair-name {
-  font-weight: bold;
-  font-size: 16px;
-  color: #409eff;
-}
-
-.spotlight-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1f2d3d;
-  margin-bottom: 12px;
-}
-
-.spotlight-value {
-  font-size: 34px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 16px;
-}
-
-.spotlight-meta,
-.fetch-time,
-.price-time,
-.empty-text {
-  font-size: 13px;
-  color: #7a8599;
-}
-
-.fetch-time {
-  margin-top: 14px;
-}
-
-.price-value {
-  font-size: 28px;
-  font-weight: bold;
-  color: #333;
-  margin: 20px 0;
-}
-
-@media (max-width: 900px) {
-  .entry-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .entry-card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+.dashboard{min-height:100vh;padding:24px;background:#f8fafc;display:flex;flex-direction:column;gap:18px}.hero,.panel,.quick-card{background:#fff;border-radius:24px;padding:24px;box-shadow:0 16px 40px rgba(15,23,42,.08)}.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 55%,#38bdf8 100%);color:#fff}.hero h1{margin-top:10px;font-size:34px}.hero p{margin-top:12px;max-width:720px;line-height:1.8;color:rgba(255,255,255,.85)}.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#94a3b8}.hero .eyebrow{color:rgba(255,255,255,.68)}.hero-badges{display:flex;flex-direction:column;gap:10px}.hero-badges span{padding:10px 14px;border-radius:999px;background:rgba(255,255,255,.12)}.quick-grid,.grid-2,.price-grid,.stage-summary{display:grid;gap:18px}.quick-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.price-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.quick-card{text-decoration:none;color:inherit;transition:transform .2s ease,box-shadow .2s ease}.quick-card:hover{transform:translateY(-4px);box-shadow:0 20px 40px rgba(37,99,235,.12)}.quick-card h2{margin-top:10px}.quick-card p{margin-top:10px;color:#475569;line-height:1.7}.section-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}.muted{font-size:12px;color:#64748b}.price-card{padding:18px;border-radius:18px;background:#eff6ff}.price-card span{font-size:12px;color:#64748b}.price-card strong{display:block;margin-top:10px;font-size:28px}.stage-pill{padding:14px;border-radius:16px;background:#f1f5f9;display:flex;flex-direction:column;gap:6px}.stage-pill.done{background:#dcfce7}.stage-pill span{color:#475569}@media (max-width:1100px){.quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:860px){.hero,.grid-2,.price-grid,.quick-grid{grid-template-columns:1fr;display:grid}.hero{display:flex;flex-direction:column}}
 </style>

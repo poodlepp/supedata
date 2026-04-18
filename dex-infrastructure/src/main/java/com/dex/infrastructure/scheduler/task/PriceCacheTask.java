@@ -1,4 +1,4 @@
-package com.dex.scheduler.task;
+package com.dex.infrastructure.scheduler.task;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;

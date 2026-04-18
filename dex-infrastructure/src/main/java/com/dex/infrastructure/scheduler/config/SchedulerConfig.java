@@ -1,4 +1,4 @@
-package com.dex.scheduler.config;
+package com.dex.infrastructure.scheduler.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;

@@ -6,6 +6,7 @@ import com.dex.data.repository.UniV3PoolEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.util.Comparator;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "spring.kafka.listener", name = "auto-startup", havingValue = "true")
 public class UniV3KafkaConsumer {
 
     private final ObjectMapper objectMapper;
