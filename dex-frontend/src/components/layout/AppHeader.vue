@@ -7,8 +7,8 @@
         <router-link to="/portfolio">Portfolio</router-link>
         <router-link to="/dashboard">Dashboard</router-link>
         <router-link to="/monitor">Monitor</router-link>
-        <router-link to="/route">Route Demo</router-link>
-        <router-link to="/blockchain">Blockchain Demo</router-link>
+        <router-link to="/route">Route</router-link>
+        <router-link to="/blockchain">Blockchain</router-link>
         <router-link to="/univ3">Uniswap V3</router-link>
       </nav>
     </div>

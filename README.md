@@ -1,67 +1,69 @@
 # DEX Aggregator Platform
 
-一个按阶段持续落地的 DEX 数据聚合平台，包含后端 API、多模块数据处理链路和前端验收看板。
+一个按阶段持续落地的 DEX 数据聚合平台，当前已经完成 **阶段 0-4 的真实可用闭环**。
 
-## 当前落地范围（对应架构文档第十部分）
+## 当前真实支持范围
 
-### 已落地
+- **链**：Ethereum Mainnet
+- **协议**：Uniswap V3
+- **交易对**：ETH/USDC、ETH/DAI
+- **价格来源**：主网真实池状态
+- **报价来源**：Uniswap V3 Quoter
+
+## 阶段状态
+
+### 已完成
 - **阶段 0：工程底座**
-  - Maven 多模块结构整理完成
-  - Docker Compose 管理 MySQL / Redis / Kafka / Zookeeper
-  - `actuator/health` 与自定义健康检查
-  - README / 启动脚本 / 初始化 SQL 对齐
+  - Maven 多模块结构
+  - Docker Compose 基础依赖
+  - `actuator/health`
+  - 初始化 SQL / 启动脚本
 - **阶段 1：单链读链与原始同步**
   - Ethereum Mainnet 连接检查
-  - 最新区块接口
-  - UniV3 pool checkpoint / 断点续传 / reorg window 回滚
+  - 最新区块读取
+  - 主网池状态读取
 - **阶段 2：DEX 协议索引与标准化**
   - UniV3 Pool 事件索引与入库
-  - 标准化事件查询接口
-  - 同池内按 `block -> tx -> log` 顺序入库
+  - checkpoint / reorg window
+  - 同池内按 `block -> tx -> log` 顺序落库
 - **阶段 3：派生指标与数据服务**
-  - 价格接口 / 流动性池接口 / 统计概览接口
-  - 前端 Dashboard 与 Stage Monitor
-- **阶段 4：报价与路由引擎（演示版）**
+  - 真实价格接口
+  - 真实流动性池接口
+  - 真实统计概览接口
+  - 移除伪 volume 输出
+- **阶段 4：报价与路由引擎**
   - `/api/v1/routes/quote`
-  - 直连池 + 两跳路径候选比较
-  - 输出路径、gas、price impact、淘汰原因
+  - ETH/USDC、ETH/DAI 真实报价
+  - 返回路径、pool、fee、滑点、块高等元信息
 
-### 下一步
+### 未完成
 - **阶段 5**：实时推送、告警、补数/回放
-- **阶段 6**：多链适配器、插件化协议解析、Reorg-safe 修复、回测导出
+- **阶段 6**：多链、多协议、历史回测导出
 
-## 技术栈
+## Review 文档
 
-### 后端
-- Java 21
-- Spring Boot 3.3
-- MyBatis
-- MySQL
-- Redis
-- Kafka
-- Web3j
-- Micrometer / Prometheus
+详细设计说明见：
 
-### 前端
-- Vue 3
-- Vite
-- Element Plus
-- Axios
-- ECharts
+- `docs/stage0-4-review-design.md`
+
+历史、已归档的 Sepolia / Demo 文档见：
+
+- `docs/archive/legacy-sepolia-demo/`
 
 ## 项目结构
 
 ```text
 supedata/
-├── dex-api/              # REST API 服务
-├── dex-business/         # 业务逻辑
-├── dex-common/           # 通用模型/异常
-├── dex-data/             # Repository / Entity / 数据处理
-├── dex-infrastructure/   # 监控、调度、链上接入、Kafka
-├── dex-frontend/         # Vue 前端应用
-├── docker-compose.yml    # 本地依赖服务
-├── init-db.sql           # 基础表与演示数据
-├── sql/univ3_indexer_init.sql
+├── dex-api/
+├── dex-business/
+├── dex-common/
+├── dex-data/
+├── dex-infrastructure/
+├── dex-frontend/
+├── docs/
+├── docker-compose.yml
+├── init-db.sql
+├── sql/
 ├── start.sh
 └── pom.xml
 ```
@@ -80,53 +82,31 @@ docker compose up -d
 docker exec -i dex-mysql mysql -uroot -proot dex_db < sql/univ3_indexer_init.sql
 ```
 
-### 3）构建后端（本机无 Maven 时可用 Docker）
+### 3）启动后端
 
 ```bash
-docker run --rm \
-  -v "$PWD":/workspace \
-  -v "$HOME/.m2":/root/.m2 \
-  -w /workspace \
-  maven:3.9.9-eclipse-temurin-21 \
-  mvn clean test package
+/Applications/IntelliJ\ IDEA.app/Contents/plugins/maven/lib/maven3/bin/mvn -pl dex-api spring-boot:run
 ```
 
-### 4）启动后端 API（本机无 Maven 时可用 Docker）
-
-```bash
-docker run --rm --name dex-api \
-  --network host \
-  -v "$PWD":/workspace \
-  -v "$HOME/.m2":/root/.m2 \
-  -w /workspace \
-  maven:3.9.9-eclipse-temurin-21 \
-  mvn -pl dex-api spring-boot:run
-```
-
-### 5）启动前端
+### 4）启动前端
 
 ```bash
 cd dex-frontend
 npm install
-npm run dev
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-## 访问地址
+## 当前接口
 
-- 前端：`http://localhost:5173`
-- 后端：`http://localhost:8080`
-- 健康检查：`http://localhost:8080/actuator/health`
-- 阶段进度：`http://localhost:8080/api/v1/stages/progress`
-- UniV3 摘要：`http://localhost:8080/api/univ3/summary`
-- 路由报价：`http://localhost:8080/api/v1/routes/quote?from=ETH&to=USDC&amountIn=1`
+- 健康检查：`/actuator/health`
+- 价格：`/api/v1/prices`
+- 流动性池：`/api/v1/liquidity/pools`
+- 统计概览：`/api/v1/statistics/overview`
+- 报价：`/api/v1/routes/quote?from=ETH&to=USDC&amountIn=1`
+- UniV3 索引：`/api/univ3/*`
 
-## 常用接口
+## 注意事项
 
-```bash
-curl http://localhost:8080/actuator/health
-curl http://localhost:8080/api/v1/prices
-curl http://localhost:8080/api/v1/liquidity/pools
-curl http://localhost:8080/api/v1/statistics/overview
-curl http://localhost:8080/api/v1/stages/progress
-curl "http://localhost:8080/api/v1/routes/quote?from=ETH&to=USDC&amountIn=1"
-```
+- 当前支持范围是**少量交易对 + 真实主网数据**，不是全量聚合器
+- 为抗 RPC 限流，真实池与真实报价带有短 TTL 缓存
+- `volume` 当前明确不输出伪值

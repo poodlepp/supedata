@@ -24,10 +24,11 @@ public class DexHealthIndicator implements HealthIndicator {
     public Health health() {
         try {
             Integer db = jdbcTemplate.queryForObject("SELECT 1", Integer.class);
-            String clientVersion = web3j.web3ClientVersion().send().getWeb3ClientVersion();
             return Health.up()
                     .withDetail("database", db != null && db == 1 ? "ok" : "unknown")
-                    .withDetail("web3", clientVersion == null ? "unreachable" : clientVersion)
+                    .withDetail("web3", "deferred")
+                    .withDetail("web3CheckEndpoint", "/api/blockchain/status")
+                    .withDetail("web3Bean", web3j.getClass().getSimpleName())
                     .build();
         } catch (Exception e) {
             return Health.down(e).build();

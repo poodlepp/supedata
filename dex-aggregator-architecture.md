@@ -1,611 +1,882 @@
-# DEX数据聚合平台 - 顶层架构设计
+# DEX 数据聚合平台 - 功能范围与开发路线（学习型重构版）
 
-> **最后更新**: 2026-04-16  
-> **模块重构**: 从7个模块优化到5个模块（dex-blockchain合并到dex-data，dex-scheduler和dex-monitor合并到dex-infrastructure）
-
-## 一、技术栈选型
-
-### 核心框架版本
-```
-Java版本：JDK 21 LTS（长期支持，2026年9月前免费）
-Spring Boot：3.3.x（最新稳定版，支持JDK 21）
-Spring Cloud：2023.0.x（对应Spring Boot 3.3）
-```
-
-**为什么选这个版本组合：**
-- JDK 21是LTS版本，生产环境稳定性最好
-- Spring Boot 3.3.x是3.x系列最新稳定版，性能优化完善
-- Spring Cloud 2023.0.x完全兼容，微服务治理成熟
-
-### 依赖库版本
-```
-Web3j：4.11.x（最新稳定，支持最新EVM）
-Kafka：3.7.x（消息队列，事件驱动）
-Redis：7.2.x（缓存层）
-MySQL：8.0.x（数据持久化）
-Lombok：1.18.x（代码简化）
-MapStruct：1.5.x（对象映射）
-```
+> **最后更新**: 2026-04-19  
+> **项目定位**: 以区块链后端学习为核心的 DEX 数据索引、分析与报价项目  
+> **交付策略**: 模块化单体优先，能力成熟后再拆分服务
 
 ---
 
-## 二、项目结构设计
+## 一、文档重写目标
 
-### 多模块Maven项目结构
-```
-dex-aggregator/
-├── pom.xml                          # 父POM，版本管理
-├── dex-common/                      # 通用模块
-│   ├── pom.xml
-│   ├── src/main/java/
-│   │   └── com/dex/common/
-│   │       ├── constant/            # 常量定义
-│   │       ├── exception/           # 异常类
-│   │       ├── util/                # 工具类
-│   │       ├── model/               # 通用DTO/VO
-│   │       └── config/              # 通用配置
-│   └── src/main/resources/
-│
-├── dex-data/                        # 数据层模块（包含区块链交互）
-│   ├── pom.xml
-│   ├── src/main/java/
-│   │   └── com/dex/data/
-│   │       ├── entity/              # JPA实体
-│   │       ├── repository/          # 数据访问层
-│   │       ├── service/             # 数据服务
-│   │       │   ├── BlockScanService.java
-│   │       │   ├── EventProcessService.java
-│   │       │   └── DataCacheService.java
-│   │       ├── blockchain/          # 区块链交互（原dex-blockchain）
-│   │       │   ├── config/          # Web3j配置
-│   │       │   └── service/         # 链交互服务
-│   │       │       ├── BlockchainService.java
-│   │       │       ├── ContractService.java
-│   │       │       └── EventListenerService.java
-│   │       └── mapper/              # MyBatis/MapStruct映射
-│   └── src/main/resources/
-│       └── db/migration/            # Flyway数据库迁移
-│
-├── dex-business/                    # 业务逻辑模块
-│   ├── pom.xml
-│   ├── src/main/java/
-│   │   └── com/dex/business/
-│   │       ├── service/
-│   │       │   ├── PriceService.java        # 价格计算
-│   │       │   ├── RouteService.java        # 路由优化
-│   │       │   ├── LiquidityService.java    # 流动性分析
-│   │       │   └── StatisticsService.java   # 统计服务
-│   │       ├── calculator/         # 计算引擎
-│   │       ├── algorithm/          # 算法实现
-│   │       └── model/              # 业务模型
-│   └── src/main/resources/
-│
-├── dex-api/                         # API服务模块
-│   ├── pom.xml
-│   ├── src/main/java/
-│   │   └── com/dex/api/
-│   │       ├── controller/          # REST控制器
-│   │       ├── websocket/           # WebSocket推送
-│   │       ├── interceptor/         # 拦截器
-│   │       ├── filter/              # 过滤器
-│   │       └── advice/              # 全局异常处理
-│   ├── src/main/resources/
-│   │   ├── application.yml          # 主配置
-│   │   ├── application-dev.yml      # 开发环境
-│   │   ├── application-prod.yml     # 生产环境
-│   │   └── logback-spring.xml       # 日志配置
-│   └── src/test/java/
-│
-└── dex-infrastructure/              # 基础设施模块（定时任务+监控）
-    ├── pom.xml
-    ├── src/main/java/
-    │   └── com/dex/infrastructure/
-    │       ├── scheduler/           # 定时任务（原dex-scheduler）
-    │       │   ├── config/          # 调度配置
-    │       │   └── task/            # 定时任务
-    │       │       ├── BlockScanTask.java
-    │       │       ├── PriceCacheTask.java
-    │       │       ├── HealthCheckTask.java
-    │       │       └── StatisticsTask.java
-    │       └── monitor/             # 监控（原dex-monitor）
-    │           ├── config/          # 监控配置
-    │           ├── metrics/         # Prometheus指标
-    │           └── health/          # 健康检查
-    └── src/main/resources/
-```
+这份文档不再把项目描述为“立即完整可生产的 DEX 平台”，而是重新定义为一个**以后端能力建设为主线的学习型项目**。  
+重点回答三个问题：
+
+1. 这个项目到底要学什么、做到什么程度。
+2. 功能边界如何控制，哪些现在做，哪些后面做。
+3. 开发路线如何由浅入深，并逐步引入重量级能力。
 
 ---
 
-## 三、分层架构设计
+## 二、项目定位
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   API Layer                         │
-│  REST Controller + WebSocket + GraphQL              │
-├─────────────────────────────────────────────────────┤
-│                 Service Layer                       │
-│  PriceService │ RouteService │ StatisticsService   │
-├─────────────────────────────────────────────────────┤
-│              Business Logic Layer                   │
-│  Calculator │ Algorithm │ EventProcessor            │
-├─────────────────────────────────────────────────────┤
-│                 Data Access Layer                   │
-│  Repository │ Cache │ BlockchainClient             │
-├─────────────────────────────────────────────────────┤
-│              Infrastructure Layer                   │
-│  Web3j │ Kafka │ Redis │ MySQL │ Prometheus        │
-└─────────────────────────────────────────────────────┘
-```
+### 1. 核心目标
 
----
+围绕 DEX 场景，系统学习以下区块链后端能力：
 
-## 四、核心模块设计
+- EVM 链接入与 RPC 调用
+- 区块、交易、日志的增量同步
+- DEX 协议事件解析与标准化建模
+- 价格、流动性、成交量等派生指标计算
+- 报价与路由算法
+- 缓存、消息流、监控、回放、容灾等工程能力
 
-### 1. dex-data（数据层 + 区块链交互）
-**职责**：数据持久化、缓存管理、区块扫描、Web3j集成、RPC调用、合约交互、事件监听
+### 2. 项目本质
 
-**关键类**：
-- **数据访问层**：
-  - `BlockScanService`：区块扫描（增量同步、断点续传）
-  - `EventProcessService`：事件解析和存储
-  - `DataCacheService`：Redis缓存管理
-  - `Repository`：数据访问对象
-- **区块链交互层**：
-  - `Web3jConfig`：Web3j连接池配置
-  - `BlockchainService`：区块链基础服务
-  - `ContractService`：合约调用封装
-  - `EventListenerService`：事件监听和处理
+这是一个**区块链数据后端项目**，不是一开始就做成“可执行交易的完整聚合器”。
 
-**依赖**：
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-data-jpa</artifactId>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-data-redis</artifactId>
-</dependency>
-<dependency>
-    <groupId>mysql</groupId>
-    <artifactId>mysql-connector-java</artifactId>
-    <version>8.0.33</version>
-</dependency>
-<dependency>
-    <groupId>org.web3j</groupId>
-    <artifactId>core</artifactId>
-    <version>5.0.2</version>
-</dependency>
-```
+项目第一阶段更关注：
 
-### 2. dex-business（业务逻辑）
-**职责**：价格计算、路由优化、流动性分析、统计计算
+- 能不能稳定读链
+- 能不能正确建模链上事件
+- 能不能把原始数据变成可查询、可分析、可推送的数据产品
 
-**关键类**：
-- `PriceCalculator`：AMM价格计算（基于Uniswap V2）
-- `RouteOptimizer`：多跳路由搜索（图算法）
-- `LiquidityAnalyzer`：TVL、APY计算
-- `StatisticsCalculator`：交易量、成交额统计
+### 3. 前后端定位
 
-**设计模式**：
-- 策略模式：支持不同DEX的价格计算
-- 工厂模式：创建不同类型的计算器
-
-### 4. dex-api（API服务）
-**职责**：REST API、WebSocket推送、请求处理
-
-**关键端点**：
-```
-GET  /api/v1/prices/{pair}              # 获取交易对价格
-GET  /api/v1/routes/best                # 获取最优路由
-GET  /api/v1/liquidity/{pool}           # 获取流动性信息
-GET  /api/v1/statistics/volume          # 获取交易量统计
-WS   /ws/prices                         # WebSocket价格推送
-```
-
-### 5. dex-infrastructure（基础设施 - 定时任务 + 监控）
-**职责**：定时扫描、数据更新、缓存刷新、监控指标、健康检查
-
-**关键任务**（Scheduler）：
-- 区块扫描任务（每12秒）
-- 价格缓存更新（每30秒）
-- 统计数据计算（每分钟）
-- 健康检查（每5秒）
-
-**关键指标**（Monitor）：
-- Prometheus指标收集
-- 自定义健康检查
-- 应用监控配置
-
-**依赖**：
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-quartz</artifactId>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-actuator</artifactId>
-</dependency>
-<dependency>
-    <groupId>io.micrometer</groupId>
-    <artifactId>micrometer-registry-prometheus</artifactId>
-</dependency>
-```
+- 后端是主角，负责索引、计算、缓存、查询、推送。
+- `dex-frontend` 主要作为演示面板和验证工具，不承担核心业务闭环。
+- 前端可以展示价格、池子、路由、监控和回放结果，但不应反向驱动后端范围失控。
 
 ---
 
-## 五、数据库设计（MySQL）
+## 三、功能范围重定义
 
-### 核心表结构
-```sql
--- 区块表
-CREATE TABLE blocks (
-    id BIGINT PRIMARY KEY,
-    block_number BIGINT UNIQUE,
-    block_hash VARCHAR(255),
-    timestamp BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+### 3.1 当前必须纳入范围的能力
 
--- 交易表
-CREATE TABLE transactions (
-    id BIGINT PRIMARY KEY,
-    tx_hash VARCHAR(255) UNIQUE,
-    block_number BIGINT,
-    from_address VARCHAR(255),
-    to_address VARCHAR(255),
-    value DECIMAL(38,0),
-    gas_price DECIMAL(38,0),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (block_number) REFERENCES blocks(block_number)
-);
+这些能力构成项目的主线，应该进入正式开发路线：
 
--- 事件表
-CREATE TABLE events (
-    id BIGINT PRIMARY KEY,
-    event_type VARCHAR(100),
-    contract_address VARCHAR(255),
-    tx_hash VARCHAR(255),
-    block_number BIGINT,
-    log_index INT,
-    data JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_contract_block (contract_address, block_number)
-);
+- 单链读链能力
+- 区块扫描与断点续传
+- 日志抓取与事件解码
+- DEX 池子/交易对标准化建模
+- 价格、TVL、Volume、K 线等派生计算
+- REST API 查询
+- Redis 热点缓存
+- 基础监控、日志、健康检查
+- WebSocket 或 SSE 实时推送
 
--- 交易对表
-CREATE TABLE trading_pairs (
-    id BIGINT PRIMARY KEY,
-    pair_address VARCHAR(255) UNIQUE,
-    token0_address VARCHAR(255),
-    token1_address VARCHAR(255),
-    reserve0 DECIMAL(38,0),
-    reserve1 DECIMAL(38,0),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+### 3.2 进阶范围
 
--- 价格缓存表
-CREATE TABLE price_cache (
-    id BIGINT PRIMARY KEY,
-    pair_address VARCHAR(255),
-    price DECIMAL(38,18),
-    timestamp BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_pair_time (pair_address, timestamp)
-);
+这些能力不是第一天就要做，但属于项目的核心成长区：
 
--- 扫描进度表
-CREATE TABLE scan_progress (
-    id INT PRIMARY KEY,
-    chain_id INT,
-    last_scanned_block BIGINT,
-    last_confirmed_block BIGINT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-```
+- 多协议适配，至少覆盖 Uniswap V2 / V3 两类模型
+- 路由报价与多跳路径搜索
+- Kafka 驱动的异步处理链路
+- 历史数据回放与补数
+- 重组窗口处理与数据纠偏
+- 更细粒度的链上统计口径
+
+### 3.3 重量级能力
+
+这些能力明确纳入路线图，但放在后期阶段实现：
+
+- 多链支持（Ethereum / Sepolia / BSC / Polygon 等）
+- 多协议适配层（V2、V3、Curve 类 StableSwap、Balancer 类加权池）
+- 可重放的索引管线
+- Reorg-safe 数据处理
+- 路由模拟与滑点、Gas 成本联合建模
+- MEV / 异常交易检测
+- 数据质量审计与自动修复
+- 历史回测与策略验证数据输出
+
+### 3.4 暂不纳入当前范围的内容
+
+以下内容容易把项目直接拉成交易系统，建议明确排除在当前主线之外：
+
+- 私钥管理与签名
+- 钱包托管与资产清结算
+- 真正的链上交易执行引擎
+- 充值、提现、风控账户体系
+- 跨链桥执行系统
+- 中心化订单簿撮合引擎
+
+如果后续要做，也应在“数据后端能力”成熟之后，作为新的项目阶段单独立项。
 
 ---
 
-## 六、缓存策略（Redis）
+## 四、建设原则
 
-```
-Key设计：
-- price:{pair_address}              # 交易对价格（TTL: 30s）
-- route:{from}:{to}                 # 路由缓存（TTL: 5m）
-- liquidity:{pool_address}          # 流动性信息（TTL: 1m）
-- scan:progress:{chain_id}          # 扫描进度（持久化）
-- statistics:volume:{pair}:{period} # 交易量统计（TTL: 1h）
-```
+为了避免范围失控，后续开发遵循以下原则：
 
----
+### 1. 模块化单体优先
 
-## 七、消息队列设计（Kafka）
+当前仓库更适合采用**多模块单体**：
 
-### Topic设计
-```
-blockchain-events          # 区块链事件流
-├── Partition 0: Swap事件
-├── Partition 1: Mint事件
-└── Partition 2: Burn事件
+- `dex-common`
+- `dex-data`
+- `dex-business`
+- `dex-api`
+- `dex-infrastructure`
+- `dex-frontend`
 
-price-updates             # 价格更新流
-├── Partition 0: 实时价格
-└── Partition 1: 历史价格
+先把模块边界理清，再决定是否拆成独立进程。  
+**不建议一开始为了“看起来高级”而引入完整微服务治理。**
 
-statistics-tasks          # 统计任务流
-└── Partition 0: 统计计算任务
-```
+### 2. 单链优先
 
-### 消费者组
-```
-event-processor-group     # 事件处理消费者
-price-calculator-group    # 价格计算消费者
-statistics-group          # 统计计算消费者
-```
+先在一条链上做深做透，再抽象多链。
 
----
+推荐顺序：
 
-## 八、监控指标（Prometheus）
+1. 本地测试链 / Sepolia
+2. Ethereum Mainnet 单链只读
+3. 其他 EVM 链
 
-### 关键指标
-```
-# 区块扫描
-dex_scan_block_height           # 当前扫描高度
-dex_scan_lag_seconds            # 扫描延迟（秒）
-dex_scan_errors_total           # 扫描错误总数
+### 3. 单协议优先
 
-# RPC调用
-dex_rpc_requests_total          # RPC请求总数
-dex_rpc_latency_ms              # RPC延迟（毫秒）
-dex_rpc_errors_total            # RPC错误总数
+先完成一个协议族的完整闭环，再扩到更多协议。
 
-# 事件处理
-dex_events_processed_total      # 处理事件总数
-dex_events_processing_lag_ms    # 事件处理延迟
+推荐顺序：
 
-# 价格计算
-dex_price_calculations_total    # 价格计算总数
-dex_price_cache_hits_total      # 缓存命中数
-dex_price_cache_misses_total    # 缓存未命中数
+1. Uniswap V2 风格池子
+2. Uniswap V3 集中流动性池
+3. StableSwap / Weighted Pool
 
-# 业务指标
-dex_active_pairs_count          # 活跃交易对数
-dex_tvl_usd                     # 总锁定价值
-dex_volume_24h_usd              # 24小时交易量
-```
+### 4. 原始数据优先
+
+所有重度分析能力都依赖**可追溯的原始链上数据**。  
+因此必须先保存：
+
+- 区块
+- 交易
+- 日志
+- 扫描检查点
+- 原始事件载荷
+
+然后再构建标准化事件和聚合结果。
+
+### 5. 正确性优先于炫技
+
+先保证以下问题成立，再谈更多功能：
+
+- 扫描不中断
+- 重启可恢复
+- 重复事件不脏写
+- Reorg 时可修正
+- 报价结果可解释
 
 ---
 
-## 九、配置管理
+## 五、能力分层：由浅入深
 
-### application.yml 结构
-```yaml
-spring:
-  application:
-    name: dex-aggregator
-  profiles:
-    active: dev
-  
-  datasource:
-    url: jdbc:mysql://localhost:3306/dex_db
-    username: root
-    password: ${DB_PASSWORD}
-    hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-  
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQL8Dialect
-        format_sql: true
-  
-  redis:
-    host: localhost
-    port: 6379
-    timeout: 2000ms
-    jedis:
-      pool:
-        max-active: 20
-        max-idle: 10
-  
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      acks: all
-      retries: 3
-    consumer:
-      group-id: dex-aggregator
-      auto-offset-reset: earliest
-
-web3j:
-  client-address: http://localhost:8545
-  admin-client: false
-  polling-interval: 15000
-
-blockchain:
-  chain-id: 1
-  network: ethereum
-  contracts:
-    uniswap-v2-router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
-    uniswap-v2-factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
-
-logging:
-  level:
-    root: INFO
-    com.dex: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-```
+| 层级 | 目标 | 代表能力 | 结果形态 |
+|------|------|----------|----------|
+| L0 工程底座 | 项目能启动、能观察、能验证 | 模块骨架、配置、日志、DB migration、Docker、本地链/测试链 | 可运行的开发环境 |
+| L1 读链与同步 | 理解链上数据获取 | RPC 调用、区块同步、日志抓取、断点续传 | 原始链上数据入库 |
+| L2 协议解析与查询 | 理解 DEX 数据结构 | V2/V3 事件解析、池子模型、基础 API | 可查询的池子/交易/价格数据 |
+| L3 派生指标与缓存 | 理解链上分析链路 | Spot Price、TVL、Volume、K 线、排行榜、Redis | 可服务前端的数据视图 |
+| L4 报价与路由 | 理解聚合器核心算法 | 多跳路径搜索、滑点模拟、Gas 成本、Quote API | 可解释的报价结果 |
+| L5 实时与运维 | 理解工程化数据服务 | Kafka、WebSocket/SSE、监控、告警、补数、回放 | 可持续运行的服务 |
+| L6 重量级能力 | 理解复杂后端系统设计 | 多链、多协议、Reorg-safe、异常检测、回测 | 接近真实行业能力的后端平台 |
 
 ---
 
-## 十、部署架构
+## 六、推荐系统架构
 
-### Docker Compose 编排
-```yaml
-version: '3.8'
-services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: dex_db
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
+### 6.1 当前阶段推荐架构
 
-  redis:
-    image: redis:7.2
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+采用“**一个可启动应用 + 多模块分层**”的架构：
 
-  kafka:
-    image: confluentinc/cp-kafka:7.7.0
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-    ports:
-      - "9092:9092"
-    depends_on:
-      - zookeeper
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.7.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
-
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-
-  dex-api:
-    build: ./dex-api
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_PASSWORD: root
-    depends_on:
-      - mysql
-      - redis
-      - kafka
-    restart: always
-
-volumes:
-  mysql_data:
-  redis_data:
+```text
+supedata/
+├── dex-common          # 通用常量、异常、响应模型、工具
+├── dex-data            # 读链、落库、索引、仓储、扫描检查点
+├── dex-business        # 协议解析、指标计算、报价、路由
+├── dex-infrastructure  # 调度、监控、消息流、链连接配置
+├── dex-api             # REST / WebSocket / 启动入口
+└── dex-frontend        # 可视化验证面板
 ```
+
+这种方式适合当前项目，因为：
+
+- 便于学习时快速闭环
+- 调试成本低
+- 模块边界仍然清晰
+- 后续拆分 `indexer`、`quote-engine`、`query-api` 也不晚
+
+### 6.2 未来可拆分形态
+
+当出现以下情况时，再考虑服务化拆分：
+
+- 索引吞吐与 API 查询相互影响
+- 报价计算明显成为独立资源热点
+- 实时推送和历史查询负载分离需求增强
+- 多链多协议使部署复杂度显著上升
+
+可演进为：
+
+- `dex-indexer-service`
+- `dex-analytics-service`
+- `dex-quote-service`
+- `dex-api-gateway`
+- `dex-stream-service`
 
 ---
 
-## 十一、开发流程
+## 七、核心数据流设计
 
-### 本地开发环境启动
-```bash
-# 1. 启动基础设施
-docker-compose up -d
-
-# 2. 创建数据库和表
-mysql -u root -p < db/schema.sql
-
-# 3. 启动应用
-mvn clean install
-mvn spring-boot:run -pl dex-api -Dspring-boot.run.arguments="--spring.profiles.active=dev"
-
-# 4. 验证服务
-curl http://localhost:8080/actuator/health
+```text
+RPC / WebSocket 节点
+        │
+        ▼
+区块扫描器 / 日志抓取器
+        │
+        ▼
+Raw Data Store
+(blocks / tx / logs / checkpoints)
+        │
+        ▼
+协议解析器
+(V2 / V3 / future adapters)
+        │
+        ▼
+Domain Events
+(swap / mint / burn / collect / pool_created)
+        │
+        ├──► 派生指标计算
+        │     (price / tvl / volume / candles)
+        │
+        ├──► 报价与路由引擎
+        │     (best path / slippage / gas)
+        │
+        └──► Kafka / 实时推送
+              (ws / sse / downstream consumers)
+                │
+                ▼
+         API / Frontend / Monitoring
 ```
+
+这条数据流强调一个关键点：  
+**先把链上原始事实收全，再从事实中计算视图和结果。**
 
 ---
 
-## 十二、关键设计决策
+## 八、领域模型与数据分层
 
-| 决策项 | 选择 | 理由 |
-|--------|------|------|
-| Java版本 | JDK 21 LTS | 长期支持，性能最优 |
-| Spring Boot | 3.3.x | 最新稳定，GraalVM支持 |
-| 数据库 | MySQL 8.0 | 成熟稳定，JSON支持 |
-| 缓存 | Redis 7.2 | 高性能，支持Stream |
-| 消息队列 | Kafka 3.7 | 高吞吐，事件驱动 |
-| ORM | Spring Data JPA | 简化开发，性能可控 |
-| 构建工具 | Maven | 企业级标准 |
-| 容器化 | Docker | 一致性部署 |
-| 监控 | Prometheus + Grafana | 开源成熟方案 |
+不建议只设计一层数据库表。  
+更适合分成三层：
 
----
+### 8.1 Raw Layer
 
-## 十三、模块依赖关系（重构后）
+职责：保留链上原始事实，支撑补数、回放、纠错。
 
-### 依赖图
-```
-dex-common (基础模块)
-    ↑
-    ├── dex-data (数据层，包含blockchain)
-    │   └── dex-common
-    │
-    ├── dex-business (业务逻辑)
-    │   ├── dex-data
-    │   └── dex-common
-    │
-    ├── dex-infrastructure (基础设施，包含scheduler+monitor)
-    │   ├── dex-data
-    │   └── dex-common
-    │
-    └── dex-api (API服务，启动类)
-        ├── dex-business
-        ├── dex-infrastructure
-        └── dex-common
-```
+建议表：
 
-### 模块职责清单
+- `chain_block`
+- `chain_transaction`
+- `chain_log`
+- `scan_checkpoint`
+- `reorg_record`
+- `sync_dead_letter`
 
-| 模块 | 文件数 | 职责 | 依赖 |
-|------|--------|------|------|
-| dex-common | 3 | 通用基础（常量、异常、响应模型） | 无 |
-| dex-data | 9 | 数据层 + 区块链交互 | dex-common |
-| dex-business | 4 | 业务逻辑（价格、路由、流动性、统计） | dex-data, dex-common |
-| dex-infrastructure | 8 | 基础设施（定时任务 + 监控） | dex-data, dex-common |
-| dex-api | 6 | REST API服务（启动类） | dex-business, dex-infrastructure, dex-common |
+### 8.2 Domain Layer
 
-### 模块重构说明
+职责：把协议事件转成统一业务模型。
 
-**2026-04-16 重构内容**：
-- ✅ **dex-blockchain 合并到 dex-data**：区块链交互是数据获取的一部分，减少模块数量
-- ✅ **dex-scheduler + dex-monitor 合并到 dex-infrastructure**：两个模块都是基础设施性质，合并后职责更清晰
-- ✅ **更新所有 pom.xml**：确保依赖关系正确，添加必要的库依赖
+建议表：
 
-**优势**：
-- 模块数量从7个减少到5个（28.6%）
-- 依赖关系更清晰，便于维护
-- 为未来微服务拆分做好准备
+- `token`
+- `dex_protocol`
+- `pool`
+- `pool_token`
+- `swap_event`
+- `liquidity_event`
+- `pool_snapshot`
+
+### 8.3 Serving Layer
+
+职责：直接面向 API、看板和实时服务。
+
+建议表或缓存对象：
+
+- `price_snapshot`
+- `candle_1m`
+- `candle_5m`
+- `pool_stats_24h`
+- `route_quote_cache`
+- `hot_pairs_ranking`
+
+### 8.4 为什么要分层
+
+这样做有四个收益：
+
+- 原始数据不丢，方便回放
+- 协议变更时，解析层可单独重跑
+- 查询层结构更稳定，面向接口输出
+- 重量级功能不需要推翻前面设计
 
 ---
 
-## 十四、后续扩展方向
+## 九、核心模块职责调整
 
-1. **多链支持**：抽象Chain接口，支持BSC、Polygon等
-2. **GraphQL API**：补充REST API，提供灵活查询
-3. **WebSocket推送**：实时价格、交易量更新
-4. **链下订单簿**：支持限价单、聚合交易
-5. **MEV检测**：识别三明治攻击、套利机会
-6. **性能优化**：批量RPC、并行扫描、分片存储
+### 9.1 dex-common
 
+职责：
+
+- 通用响应模型
+- 异常体系
+- 枚举与常量
+- 时间、地址、精度等工具类
+- 基础配置模型
+
+### 9.2 dex-data
+
+职责：
+
+- RPC 客户端封装
+- 区块扫描
+- 日志抓取
+- 原始数据落库
+- 扫描进度与幂等控制
+- 数据仓储接口
+
+建议重点：
+
+- `BlockScanner`
+- `LogFetcher`
+- `CheckpointService`
+- `RawBlockRepository`
+- `RawLogRepository`
+
+### 9.3 dex-business
+
+职责：
+
+- 协议事件解析
+- 统一领域模型构建
+- 价格与统计计算
+- 路由与报价算法
+- 数据校验与纠偏
+
+建议重点：
+
+- `ProtocolAdapter`
+- `V2EventParser`
+- `V3EventParser`
+- `PriceService`
+- `LiquidityService`
+- `RouteQuoteService`
+
+### 9.4 dex-infrastructure
+
+职责：
+
+- 定时任务
+- 消息队列接入
+- 监控与指标
+- 链连接配置
+- 限流、重试、告警
+
+建议重点：
+
+- `Web3jConfig`
+- `SchedulerConfig`
+- `MetricsRegistry`
+- `KafkaPublisher`
+- `RpcRetryPolicy`
+
+### 9.5 dex-api
+
+职责：
+
+- REST API
+- WebSocket / SSE 推送
+- 参数校验
+- 限流与鉴权预留
+- 对外 DTO 组装
+
+建议接口方向：
+
+- `/api/v1/chains`
+- `/api/v1/blocks/latest`
+- `/api/v1/pools`
+- `/api/v1/swaps`
+- `/api/v1/prices`
+- `/api/v1/routes/quote`
+- `/api/v1/monitor/metrics`
+
+### 9.6 dex-frontend
+
+职责：
+
+- 数据验证面板
+- 价格与池子可视化
+- 路由结果对比展示
+- 监控与告警看板
+
+前端应避免承担复杂业务逻辑，重点是**帮助验证后端结果是否正确**。
+
+---
+
+## 十、功能设计：分阶段落地
+
+### 阶段 0：工程底座
+
+#### 目标
+
+把项目变成一个真正可迭代的后端工程，而不是零散 Demo。
+
+#### 范围
+
+- 整理 Maven 多模块结构
+- 统一配置文件与环境变量
+- 补齐数据库迁移脚本
+- Docker Compose 管理 MySQL / Redis / Kafka
+- 健康检查、基础日志、错误码体系
+- 前端保留为简单验证页面
+
+#### 交付物
+
+- 一键启动本地环境
+- API 服务可启动
+- 基础表结构可迁移
+- 文档与目录结构一致
+
+#### 验收标准
+
+- 新机器按文档能在 30 分钟内启动
+- `actuator/health` 正常
+- 至少有 1 个链连接检查接口
+
+### 阶段 1：单链读链与原始同步
+
+#### 目标
+
+建立“后端真正连接区块链”的第一条主链路。
+
+#### 范围
+
+- RPC 连接与节点状态检测
+- 最新区块获取
+- 区块范围扫描
+- 交易与日志抓取
+- 扫描进度表
+- 失败重试与断点续传
+
+#### 交付物
+
+- 可以从指定区块开始增量同步
+- 原始区块、交易、日志入库
+- 服务重启后从检查点继续
+
+#### 验收标准
+
+- 重启不会重复写脏数据
+- 扫描进度可查询
+- 能输出当前同步延迟
+
+### 阶段 2：DEX 协议索引与标准化
+
+#### 目标
+
+把链上日志变成真正可用的 DEX 业务数据。
+
+#### 范围
+
+- 解析 Uniswap V2 PairCreated / Swap / Mint / Burn
+- 解析 Uniswap V3 PoolCreated / Swap / Mint / Burn / Collect / Initialize
+- 建立 `token`、`pool`、`swap_event` 等领域表
+- 统一不同协议的事件输出格式
+
+#### 交付物
+
+- 指定池子的最近成交列表
+- 指定池子的元数据和储备信息
+- 标准化事件查询接口
+
+#### 验收标准
+
+- 任意一条链上事件都能定位到原始日志
+- 同一事件不会重复入库
+- V2/V3 数据模型可共存
+
+### 阶段 3：派生指标与数据服务
+
+#### 目标
+
+把原始事件加工成前端和业务真正消费的数据，并把“计算链路”和“查询链路”彻底分开。
+
+#### 范围
+
+- 建立独立的数据更新链路：
+  - 事件驱动或定时任务负责增量计算
+  - 指标结果写入 Serving Layer 和 Redis
+  - API 仅读取缓存或物化结果，不临时做重计算
+- Spot Price / Mid Price / 最新成交价
+- 24h Volume、24h 交易笔数、24h 活跃池子数
+- TVL、流动性深度、买卖价差近似值
+- 1m / 5m / 1h K 线
+- 热门池子排行、热门 Token 排行、涨跌幅排行
+- 异常波动提示：
+  - 价格瞬时跳变
+  - 成交量突增
+  - 池子流动性快速下降
+- Redis 缓存与缓存失效策略
+- 基础 Dashboard API 与首页聚合接口
+
+#### 阶段 3 重点展示指标
+
+前端不应该平铺大量次要数字，而应优先展示一眼能看懂、同时能体现后端能力的数据：
+
+- 全局总览卡片：
+  - ETH 主价格
+  - 全站 24h Volume
+  - 全站 TVL
+  - 最新区块高度与同步延迟
+- 重点池子卡片：
+  - 池子名称、协议、费率
+  - 当前价格
+  - 24h 涨跌幅
+  - 24h Volume
+  - TVL
+  - 最近一次更新时间
+- 趋势与结构：
+  - 价格走势 K 线
+  - 24h Volume 趋势
+  - TVL 排行
+  - 热门池子流动性深度对比
+- 亮点信息区：
+  - 今日最活跃池子
+  - 价格波动最大的池子
+  - 新进入排行榜的池子
+  - 最近异常波动提示
+
+#### 阶段 3 后端设计要求
+
+- 指标更新逻辑独立：
+  - `Indexer/Parser -> Metrics Jobs -> Redis/Serving Tables -> Query API`
+  - 禁止由前端请求直接触发重计算
+- 按指标类型拆分刷新频率：
+  - 秒级：价格快照、同步状态
+  - 分钟级：池子统计、排行榜
+  - 小时级：聚合概览、异常归档
+- API 面向展示结果建模，而不是直接暴露底层表
+- 首页接口尽量聚合返回，减少前端多次串行请求
+- 缓存对象需要包含 `updatedAt`、`blockNumber`、`source`，保证结果可解释
+
+#### 交付物
+
+- 首页总览接口
+- 价格接口
+- 池子统计接口
+- K 线接口
+- 热门榜单接口
+- 异常波动提示接口
+- 前端看板第一版，能突出重点数据而不是只做表格堆叠
+
+#### 验收标准
+
+- 常用查询默认命中缓存，查询链路不依赖现场聚合计算
+- 前端首页首屏可以快速返回关键指标
+- 统计口径可说明、可复算、可追溯到快照来源
+- 前端能同时展示“全局总览 + 重点池子 + 趋势变化 + 异常提示”
+- 页面效果要能体现“这是一个会自己更新数据的实时数据产品”，而不是静态报表
+
+### 阶段 4：报价与路由引擎
+
+#### 目标
+
+开始进入聚合器真正有技术含量的部分，让系统具备“在多个池子、多条路径中寻找更优报价”的能力。
+
+#### 范围
+
+- 扩大可参与报价的池子范围：
+  - 同交易对的多个 V3 费率池
+  - 更多主流中间 Token 池子
+  - 后续可扩展到 V2 与 V3 混合图
+- Token 图构建
+- 多跳路径搜索
+- 多路径拆单报价
+- Exact In / Exact Out 报价
+- 滑点模拟与价格冲击估算
+- Gas 成本估算
+- 路径淘汰与打分解释信息输出
+- 候选路径缓存与热点币对报价缓存
+
+#### 阶段 4 路由策略重点
+
+不仅要找到“能走通”的路径，更要展示“为什么这是更优路径”：
+
+- 直接路径与多跳路径对比
+- 单路径与多路径拆单对比
+- 同交易对不同费率池对比
+- 不同中间 Token 路径对比，例如 `ETH -> USDC` 与 `ETH -> DAI -> USDC`
+- 展示每条路径的：
+  - 预估输出数量
+  - 价格冲击
+  - 手续费损耗
+  - 预估 Gas
+  - 折算后的净收益或净到手量
+  - 跳数与路径稳定性
+
+#### 阶段 4 评分与选路要求
+
+- 路径评分不只看毛报价，要综合：
+  - `grossAmountOut`
+  - `priceImpact`
+  - `lpFeeCost`
+  - `gasAmount`
+  - `gasCostUsd`
+  - `netAmountOut`
+  - `hopCount`
+  - `liquidityDepthScore`
+  - `quoteFreshness`
+- 最终排序应优先基于净效果，而不是单纯输出最多
+- 对被淘汰路径记录原因，例如：
+  - 流动性不足
+  - Gas 成本过高
+  - 多跳后净收益变差
+  - 价格冲击超过阈值
+  - 报价结果过期
+
+#### 阶段 4 前端展示要求
+
+- 路由结果不能只返回一条 path 字符串
+- 前端要能展示：
+  - 最优路径
+  - 候选路径排行
+  - 多路径拆单比例
+  - 各路径的收益/Gas/滑点对比
+  - 路径淘汰原因
+- 在多路径场景下，用户应能直观看出系统是在“比较之后选择”，不是硬编码返回固定路由
+
+#### 交付物
+
+- `/api/v1/routes/quote`
+- `/api/v1/routes/compare`
+- 候选路径列表
+- 多路径拆单结果
+- 路径得分和淘汰原因
+- 路由对比展示页或面板
+
+#### 验收标准
+
+- 同一请求返回结果稳定可解释
+- 报价结果包含数量、路径、Gas、滑点、净到手量
+- 至少支持同币对多池、多跳、多候选路径比较
+- 多路径场景下能展示系统如何找到更优路径
+- 能对比不同池子、不同费率层、不同中间 Token 的收益差异
+
+### 阶段 5：实时化与运维能力
+
+#### 目标
+
+把项目从“能算”提升到“能持续跑”。
+
+#### 范围
+
+- Kafka 异步事件流
+- WebSocket / SSE 推送
+- Prometheus 指标
+- 告警与健康检查
+- 历史补数任务
+- 回放任务
+- 死信队列与异常事件记录
+
+#### 交付物
+
+- 实时价格推送
+- 处理延迟监控
+- 可手动触发某段区块重放
+- 数据延迟告警
+
+#### 验收标准
+
+- 推送链路与批处理链路分离
+- 出错事件可追踪
+- 补数不会破坏在线数据
+
+### 阶段 6：重量级能力
+
+#### 目标
+
+把项目提升到“行业后端系统设计练习”的层级。
+
+#### 范围
+
+- 多链适配器抽象
+- 多协议插件化解析
+- Reorg-safe 流程
+- 回放驱动的数据修复
+- MEV / 套利 / 异常交易检测
+- 历史回测数据导出
+- 数据质量审计
+
+#### 交付物
+
+- `ChainAdapter` 抽象
+- `ProtocolAdapter` 抽象
+- Reorg 修复记录
+- 异常交易报告
+- 回测数据集或导出任务
+
+#### 验收标准
+
+- 链切换不需要重写核心业务逻辑
+- 发生重组时可自动修正受影响数据
+- 可以对某个时间区间重新构建指标
+
+---
+
+## 十一、重量级功能清单
+
+下面这些是本项目后期最有含金量的能力，建议明确保留：
+
+| 功能 | 价值 | 前置阶段 |
+|------|------|----------|
+| Reorg-safe 索引 | 真正理解链上数据一致性问题 | 阶段 1, 2 |
+| 回放与补数 | 让数据系统具备修复能力 | 阶段 2, 5 |
+| 多链抽象 | 理解不同链上的统一建模 | 阶段 2 之后 |
+| 多协议适配 | 把后端从“写死逻辑”升级为“平台逻辑” | 阶段 2 之后 |
+| 路由与报价 | 进入聚合器核心算法区 | 阶段 4 |
+| MEV / 异常检测 | 提升项目深度和辨识度 | 阶段 6 |
+| 数据质量审计 | 体现工程系统思维 | 阶段 5, 6 |
+| 历史回测 | 为分析和策略系统提供基础 | 阶段 6 |
+
+---
+
+## 十二、技术选型建议
+
+### 12.1 建议基线
+
+- Java 21
+- Spring Boot 3.x
+- Maven 多模块
+- MySQL
+- Redis
+- Web3j
+- Kafka
+- Prometheus + Grafana
+- Vue 3 前端验证面板
+
+### 12.2 选型原则
+
+- 版本号以仓库 `pom.xml` 为准，不在文档中追求频繁更新小版本。
+- Spring Cloud 暂不作为前期主线依赖，避免为拆分而拆分。
+- Kafka 不是一期必需，但从实时推送和解耦角度看，适合在阶段 5 引入。
+- 如果后期历史查询和统计压力明显增加，可再评估分析型存储，而不是现在提前引入。
+
+---
+
+## 十三、近期建议开发顺序
+
+结合当前仓库现状，建议近期按下面顺序推进：
+
+1. 先把后端真正补齐最小可运行骨架。
+2. 做区块与日志同步，不要先冲路由算法。
+3. 先跑通一个协议族的数据闭环，再扩协议。
+4. 先提供查询 API，再做实时推送。
+5. 指标和监控不要后补，要从阶段 1 就开始埋点。
+
+更具体一点：
+
+### 第 1 周
+
+- 整理模块目录
+- 补 DB migration
+- 完成链连接检查接口
+- 完成扫描检查点表
+
+### 第 2 周
+
+- 实现区块扫描
+- 实现日志抓取
+- 原始数据入库
+- 增加同步延迟指标
+
+### 第 3 周
+
+- 解析 Uniswap V2 或 V3 一种协议
+- 建立池子、Token、Swap 领域模型
+- 提供基础查询接口
+
+### 第 4 周
+
+- 计算价格、Volume、TVL
+- 接前端看板
+- 引入 Redis 缓存
+
+### 第 5-6 周
+
+- 实现报价与路由
+- 输出可解释路径详情
+- 做一轮性能与正确性验证
+
+### 第 7 周以后
+
+- Kafka、实时推送、补数回放
+- Reorg 处理
+- 多链 / 多协议
+- 异常检测和回测
+
+---
+
+## 十四、阶段性里程碑定义
+
+项目做到下面四个节点，才算真正形成学习闭环：
+
+### M1 可读链
+
+标志：
+
+- 能稳定连接链
+- 能同步区块和日志
+- 能断点恢复
+
+### M2 可理解协议
+
+标志：
+
+- 能解析 DEX 核心事件
+- 能建立池子和交易模型
+- 能提供基础查询
+
+### M3 可服务数据
+
+标志：
+
+- 能输出价格、TVL、Volume、K 线
+- 有缓存和监控
+- 前端可稳定展示
+
+### M4 可做复杂后端课题
+
+标志：
+
+- 有路由报价
+- 有回放和补数
+- 有 Reorg 处理
+- 有至少一项重量级能力落地
+
+---
+
+## 十五、最终目标
+
+这不是一个“把功能堆满”的项目，而是一个**通过 DEX 场景系统学习区块链后端设计的方法论项目**。
+
+最终希望形成的不是单一 Demo，而是一套清晰的能力地图：
+
+- 我如何读链
+- 我如何建模协议
+- 我如何做派生分析
+- 我如何设计报价系统
+- 我如何处理一致性、实时性和可运维性
+
+如果按这份路线推进，项目会自然从：
+
+**链上数据 Demo**
+
+逐步成长为：
+
+**具备索引、分析、报价、回放、修复和监控能力的区块链后端练习平台**
+
+这才是这个仓库更合理的功能范围与演进方向。

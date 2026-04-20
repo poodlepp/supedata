@@ -3,8 +3,8 @@
     <section class="hero">
       <div>
         <div class="eyebrow">DELIVERY TRACKER</div>
-        <h1>分阶段开发落地看板</h1>
-        <p>把架构文档第十部分拆成可观察的交付状态，当前优先显示已完成的工程底座、单链读链、协议索引、数据服务和初版报价能力。</p>
+        <h1>分阶段交付验收看板</h1>
+        <p>当前展示阶段 0-4 的真实交付状态：主网连接、协议索引、真实池数据服务与真实报价能力均已收口验收。</p>
       </div>
       <el-button type="primary" :loading="loading" @click="loadAll">刷新</el-button>
     </section>
@@ -23,8 +23,8 @@
         <strong>{{ progress?.poolCount || 0 }}</strong>
       </article>
       <article class="stat-card">
-        <span>UniV3</span>
-        <strong>{{ progress?.univ3Status || '--' }}</strong>
+        <span>Price Pairs</span>
+        <strong>{{ progress?.pricePairsReady || 0 }}</strong>
       </article>
     </section>
 
@@ -39,7 +39,7 @@
               <div class="stage-code">{{ stage.code }}</div>
               <h3>{{ stage.name }}</h3>
             </div>
-            <el-tag :type="stage.done ? 'success' : 'info'">{{ stage.done ? '已完成/已落地' : '下一阶段' }}</el-tag>
+            <el-tag :type="stage.done ? 'success' : 'info'">{{ stage.done ? '已完成/已验收' : '后续阶段' }}</el-tag>
           </div>
           <ul>
             <li v-for="item in stage.deliverables" :key="item">{{ item }}</li>
@@ -51,12 +51,12 @@
     <section class="panel grid">
       <article class="mini-panel">
         <div class="eyebrow">OVERVIEW</div>
-        <h2>数据服务概览</h2>
+        <h2>真实数据概览</h2>
         <pre>{{ JSON.stringify(overview, null, 2) }}</pre>
       </article>
       <article class="mini-panel">
         <div class="eyebrow">VOLUME</div>
-        <h2>ETH-USDC 示例统计</h2>
+        <h2>当前统计边界</h2>
         <pre>{{ JSON.stringify(volume, null, 2) }}</pre>
       </article>
     </section>

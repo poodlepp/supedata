@@ -5,3 +5,6 @@ export const getBestRoute = (from, to, amountIn = 1) =>
 
 export const getQuote = (from, to, amountIn = 1) =>
   http.get('/api/v1/routes/quote', { params: { from, to, amountIn } })
+
+export const getCompare = (from, to, amountIn = 1) =>
+  http.get('/api/v1/routes/compare', { params: { from, to, amountIn } })

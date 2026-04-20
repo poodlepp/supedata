@@ -3,8 +3,8 @@
     <section class="hero-panel">
       <div>
         <div class="eyebrow">BLOCKCHAIN CONSOLE</div>
-        <h1>Uniswap V2 监听面板</h1>
-        <p>实时查看主网 ETH/USDT、最新区块以及 Uniswap V2 Swap 事件流；当前仅展示最新 10 条，并支持悬停暂停与点击查看交易详情。</p>
+        <h1>主链状态与监听面板</h1>
+        <p>查看主网连接状态、最新区块、链上价格监听与 Swap 事件流；该页面用于验证读链与监听能力，并作为真实交付的一部分持续保留。</p>
       </div>
       <div class="hero-actions">
         <el-button type="primary" :loading="loading" :disabled="isListening" @click="handleStartListener">启动监听</el-button>
@@ -41,12 +41,12 @@
       <div class="panel-head">
         <div>
           <div class="eyebrow">SWAP TAPE</div>
-          <h2>Uniswap V2 Swap 事件流</h2>
+          <h2>Swap 事件流</h2>
         </div>
         <div class="feed-tip">最新 {{ sampledSwapEvents.length }} 条 / 共 {{ swapEvents.length }} 条</div>
       </div>
 
-      <div v-if="!sampledSwapEvents.length" class="empty-feed">启动监听后，这里会显示最新的 ETH/USDT Swap 事件。</div>
+      <div v-if="!sampledSwapEvents.length" class="empty-feed">启动监听后，这里会显示最新的 Swap 事件。</div>
 
       <div v-else class="swap-feed-shell" @mouseenter="isFeedHovered = true" @mouseleave="isFeedHovered = false">
         <div class="swap-feed-track" :class="{ paused: !isListening || isFeedHovered }">

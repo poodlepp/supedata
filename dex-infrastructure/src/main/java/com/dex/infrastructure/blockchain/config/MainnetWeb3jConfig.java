@@ -1,5 +1,6 @@
 package com.dex.infrastructure.blockchain.config;
 
+import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -9,6 +10,7 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
 import org.web3j.protocol.websocket.WebSocketService;
 
+import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -24,6 +26,15 @@ public class MainnetWeb3jConfig {
     @Value("${blockchain.mainnet.ws-url:wss://mainnet.infura.io/ws/v3/YOUR_INFURA_KEY}")
     private String mainnetWsUrl;
 
+    @Value("${blockchain.mainnet.connect-timeout-ms:2000}")
+    private long connectTimeoutMs;
+
+    @Value("${blockchain.mainnet.read-timeout-ms:4000}")
+    private long readTimeoutMs;
+
+    @Value("${blockchain.mainnet.call-timeout-ms:5000}")
+    private long callTimeoutMs;
+
     @Value("${web3j.polling-interval:15000}")
     private long pollingInterval;
 
@@ -35,7 +46,12 @@ public class MainnetWeb3jConfig {
     @Bean
     @Primary
     public Web3j web3j(ScheduledExecutorService web3jScheduledExecutorService) {
-        return Web3j.build(new HttpService(mainnetRpcUrl), pollingInterval, web3jScheduledExecutorService);
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
+                .readTimeout(Duration.ofMillis(readTimeoutMs))
+                .callTimeout(Duration.ofMillis(callTimeoutMs))
+                .build();
+        return Web3j.build(new HttpService(mainnetRpcUrl, httpClient, false), pollingInterval, web3jScheduledExecutorService);
     }
 
     @Bean(destroyMethod = "close")

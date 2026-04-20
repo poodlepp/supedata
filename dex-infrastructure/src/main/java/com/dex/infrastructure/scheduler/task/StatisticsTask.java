@@ -11,6 +11,6 @@ public class StatisticsTask {
 
     @Scheduled(fixedDelay = 60000)
     public void calculateStatistics() {
-        // TODO: 实现统计数据计算任务（每分钟）
+        // 具体的统计预热任务放在上层模块实现，避免基础设施模块反向依赖业务模块。
     }
 }

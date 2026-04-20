@@ -1,6 +1,7 @@
 package com.dex.business.service;
 
-import com.dex.data.entity.LiquidityPool;
+import com.dex.infrastructure.blockchain.univ3.RealPoolSnapshot;
+import com.dex.infrastructure.blockchain.univ3.UniV3RealPoolService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -12,198 +13,213 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
 /**
- * 路由优化服务
- *
- * 当前阶段先提供可解释、可验证的演示版报价能力：
- * - 直接池报价
- * - 通过 USDC/ETH 的两跳报价
- * - 输出路径、预估输出、价格影响、gas 与淘汰原因
+ * 报价与路由服务：支持同币对多费率层对比 + 多跳路径，返回多候选路径及评分。
  */
 @Service
 @RequiredArgsConstructor
 public class RouteService {
 
-    private static final BigDecimal FEE_RATE = new BigDecimal("0.003");
-    private static final BigDecimal ONE = BigDecimal.ONE;
+    /** 每跳固定 gas 成本（USD），用于净收益评分 */
     private static final BigDecimal GAS_PER_HOP_USD = new BigDecimal("1.20");
+    /** 价格冲击超过此阈值则标记为淘汰 */
+    private static final BigDecimal PRICE_IMPACT_THRESHOLD = new BigDecimal("5.0");
 
-    private final LiquidityService liquidityService;
+    private final UniV3RealPoolService realPoolService;
+
+    // ------------------------------------------------------------------ quote
 
     public Map<String, Object> quote(String from, String to, BigDecimal amountIn) {
         String source = normalize(from);
         String target = normalize(to);
-        BigDecimal normalizedAmountIn = amountIn == null || amountIn.signum() <= 0
-                ? BigDecimal.ONE
-                : amountIn;
+        BigDecimal safeAmount = amountIn == null || amountIn.signum() <= 0 ? BigDecimal.ONE : amountIn;
 
-        List<LiquidityPool> pools = liquidityService.getAllPools();
-        List<RouteCandidate> candidates = buildCandidates(source, target, normalizedAmountIn, pools);
-        candidates.sort(Comparator.comparing(RouteCandidate::netOutput).reversed());
+        List<Map<String, Object>> candidates = buildCandidates(source, target, safeAmount);
+        Map<String, Object> best = candidates.stream()
+                .filter(c -> Boolean.TRUE.equals(c.get("viable")))
+                .max(Comparator.comparing(c -> (BigDecimal) c.get("netScore")))
+                .orElse(null);
 
-        RouteCandidate best = candidates.stream().filter(RouteCandidate::viable).findFirst().orElse(null);
-
-        return Map.of(
-                "fromToken", source,
-                "toToken", target,
-                "amountIn", normalizedAmountIn,
-                "best", best == null ? null : toMap(best),
-                "candidates", candidates.stream().map(this::toMap).toList(),
-                "generatedAt", System.currentTimeMillis()
-        );
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("fromToken", source);
+        payload.put("toToken", target);
+        payload.put("amountIn", safeAmount);
+        payload.put("best", best);
+        payload.put("candidates", candidates);
+        payload.put("generatedAt", System.currentTimeMillis());
+        payload.put("mode", "multi-path-real-pools");
+        return payload;
     }
 
-    private List<RouteCandidate> buildCandidates(String from, String to, BigDecimal amountIn, List<LiquidityPool> pools) {
-        List<RouteCandidate> result = new ArrayList<>();
+    // ---------------------------------------------------------------- compare
 
-        result.add(buildDirectCandidate(from, to, amountIn, pools));
+    public Map<String, Object> compare(String from, String to, BigDecimal amountIn) {
+        String source = normalize(from);
+        String target = normalize(to);
+        BigDecimal safeAmount = amountIn == null || amountIn.signum() <= 0 ? BigDecimal.ONE : amountIn;
 
-        for (String bridge : List.of("USDC", "ETH", "DAI", "BTC")) {
-            if (bridge.equals(from) || bridge.equals(to)) {
-                continue;
-            }
-            result.add(buildTwoHopCandidate(from, bridge, to, amountIn, pools));
-        }
+        List<Map<String, Object>> candidates = buildCandidates(source, target, safeAmount);
+        List<Map<String, Object>> viable = candidates.stream()
+                .filter(c -> Boolean.TRUE.equals(c.get("viable")))
+                .sorted(Comparator.comparing((Map<String, Object> c) -> (BigDecimal) c.get("netScore")).reversed())
+                .toList();
+        List<Map<String, Object>> eliminated = candidates.stream()
+                .filter(c -> !Boolean.TRUE.equals(c.get("viable")))
+                .toList();
 
-        return result;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("fromToken", source);
+        payload.put("toToken", target);
+        payload.put("amountIn", safeAmount);
+        payload.put("viableCount", viable.size());
+        payload.put("eliminatedCount", eliminated.size());
+        payload.put("ranked", viable);
+        payload.put("eliminated", eliminated);
+        payload.put("generatedAt", System.currentTimeMillis());
+        return payload;
     }
 
-    private RouteCandidate buildDirectCandidate(String from, String to, BigDecimal amountIn, List<LiquidityPool> pools) {
-        Optional<SwapQuote> quote = quoteAcrossPool(from, to, amountIn, pools);
-        if (quote.isEmpty()) {
-            return RouteCandidate.rejected(List.of(from, to), "NO_POOL", "未找到直连池");
+    // --------------------------------------------------------- path building
+
+    private List<Map<String, Object>> buildCandidates(String source, String target, BigDecimal amountIn) {
+        List<Map<String, Object>> candidates = new ArrayList<>();
+
+        // 1. 直接路径：同交易对所有费率层
+        List<RealPoolSnapshot> directPools = realPoolService.findAllPoolsByPair(source, target);
+        for (RealPoolSnapshot pool : directPools) {
+            candidates.add(buildDirectCandidate(source, target, amountIn, pool));
         }
-        return RouteCandidate.accepted(
-                List.of(from, to),
-                quote.get().amountOut,
-                quote.get().grossAmountOut,
-                quote.get().priceImpactPct,
-                GAS_PER_HOP_USD,
-                "DIRECT_POOL",
-                List.of(quote.get().poolAddress)
-        );
+
+        // 2. 多跳路径：通过中间 token
+        for (String mid : List.of("DAI", "USDC", "WETH")) {
+            if (mid.equals(source) || mid.equals(target)) continue;
+            candidates.add(buildMultiHopCandidate(source, mid, target, amountIn));
+        }
+
+        // 如果没有任何候选，返回一个不支持的占位
+        if (candidates.isEmpty()) {
+            candidates.add(unsupportedCandidate(source, target, "PAIR_NOT_SUPPORTED", "当前不支持该交易对"));
+        }
+        return candidates;
     }
 
-    private RouteCandidate buildTwoHopCandidate(String from, String bridge, String to, BigDecimal amountIn, List<LiquidityPool> pools) {
-        Optional<SwapQuote> first = quoteAcrossPool(from, bridge, amountIn, pools);
-        if (first.isEmpty()) {
-            return RouteCandidate.rejected(List.of(from, bridge, to), "NO_FIRST_HOP", "首跳缺少可用池");
+    private Map<String, Object> buildDirectCandidate(String source, String target,
+                                                      BigDecimal amountIn, RealPoolSnapshot pool) {
+        Map<String, Object> single = realPoolService.quoteExactInputSingle(pool, source, target, amountIn);
+        if (!Boolean.TRUE.equals(single.get("supported"))) {
+            return unsupportedCandidate(source, target,
+                    (String) single.get("reason"), (String) single.get("message"));
         }
 
-        Optional<SwapQuote> second = quoteAcrossPool(bridge, to, first.get().amountOut, pools);
-        if (second.isEmpty()) {
-            return RouteCandidate.rejected(List.of(from, bridge, to), "NO_SECOND_HOP", "第二跳缺少可用池");
-        }
+        BigDecimal amountOut = (BigDecimal) single.get("amountOut");
+        BigDecimal priceImpact = (BigDecimal) single.get("priceImpactPct");
+        BigDecimal gasCost = GAS_PER_HOP_USD;
+        BigDecimal netScore = amountOut.subtract(gasCost).setScale(8, RoundingMode.HALF_UP);
 
-        BigDecimal totalGas = GAS_PER_HOP_USD.multiply(new BigDecimal("2"));
-        BigDecimal weightedImpact = first.get().priceImpactPct.add(second.get().priceImpactPct);
-
-        return RouteCandidate.accepted(
-                List.of(from, bridge, to),
-                second.get().amountOut,
-                second.get().grossAmountOut,
-                weightedImpact,
-                totalGas,
-                "TWO_HOP",
-                List.of(first.get().poolAddress, second.get().poolAddress)
-        );
+        Map<String, Object> c = new LinkedHashMap<>();
+        c.put("path", List.of(source, target));
+        c.put("type", "DIRECT_" + pool.getFee());
+        c.put("label", pool.getPoolName());
+        c.put("viable", priceImpact.compareTo(PRICE_IMPACT_THRESHOLD) < 0);
+        c.put("eliminationReason", priceImpact.compareTo(PRICE_IMPACT_THRESHOLD) >= 0
+                ? "价格冲击 " + priceImpact.setScale(2, RoundingMode.HALF_UP) + "% 超过阈值" : null);
+        c.put("poolAddresses", List.of(pool.getPoolAddress()));
+        c.put("poolName", pool.getPoolName());
+        c.put("fee", pool.getFee());
+        c.put("hopCount", 1);
+        c.put("amountOut", amountOut);
+        c.put("grossAmountOut", single.get("grossAmountOut"));
+        c.put("gasCostUsd", gasCost);
+        c.put("priceImpactPct", priceImpact);
+        c.put("netScore", netScore);
+        c.put("blockNumber", single.get("blockNumber"));
+        c.put("blockTimestamp", single.get("blockTimestamp"));
+        c.put("source", single.get("source"));
+        c.put("dex", single.get("dex"));
+        return c;
     }
 
-    private Optional<SwapQuote> quoteAcrossPool(String from, String to, BigDecimal amountIn, List<LiquidityPool> pools) {
-        return pools.stream()
-                .map(pool -> quotePool(pool, from, to, amountIn))
-                .flatMap(Optional::stream)
-                .max(Comparator.comparing(q -> q.amountOut));
+    private Map<String, Object> buildMultiHopCandidate(String source, String mid, String target,
+                                                        BigDecimal amountIn) {
+        // 检查两段路径是否都有池子
+        List<RealPoolSnapshot> leg1Pools = realPoolService.findAllPoolsByPair(source, mid);
+        List<RealPoolSnapshot> leg2Pools = realPoolService.findAllPoolsByPair(mid, target);
+        if (leg1Pools.isEmpty() || leg2Pools.isEmpty()) {
+            return unsupportedCandidate(source, target,
+                    "NO_INTERMEDIATE_POOL",
+                    "缺少中间 token " + mid + " 的池子");
+        }
+
+        Map<String, Object> result = realPoolService.quoteMultiHopExactInput(
+                List.of(source, mid, target), amountIn);
+
+        if (!Boolean.TRUE.equals(result.get("supported"))) {
+            return unsupportedCandidate(source, target,
+                    (String) result.get("reason"), (String) result.get("message"));
+        }
+
+        BigDecimal amountOut = (BigDecimal) result.get("amountOut");
+        BigDecimal priceImpact = (BigDecimal) result.get("priceImpactPct");
+        BigDecimal gasCost = GAS_PER_HOP_USD.multiply(new BigDecimal("2")); // 2 跳
+        BigDecimal netScore = amountOut.subtract(gasCost).setScale(8, RoundingMode.HALF_UP);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> hops = (List<Map<String, Object>>) result.get("hops");
+        List<String> poolAddresses = hops.stream()
+                .map(h -> (String) h.get("poolAddress"))
+                .toList();
+
+        boolean viable = priceImpact.compareTo(PRICE_IMPACT_THRESHOLD) < 0;
+        String eliminationReason = null;
+        if (!viable) {
+            eliminationReason = "多跳累计价格冲击 " + priceImpact.setScale(2, RoundingMode.HALF_UP) + "% 超过阈值";
+        }
+
+        Map<String, Object> c = new LinkedHashMap<>();
+        c.put("path", List.of(source, mid, target));
+        c.put("type", "MULTI_HOP_VIA_" + mid);
+        c.put("label", source + " → " + mid + " → " + target);
+        c.put("viable", viable);
+        c.put("eliminationReason", eliminationReason);
+        c.put("poolAddresses", poolAddresses);
+        c.put("hopCount", 2);
+        c.put("amountOut", amountOut);
+        c.put("grossAmountOut", null);
+        c.put("gasCostUsd", gasCost);
+        c.put("priceImpactPct", priceImpact);
+        c.put("netScore", netScore);
+        c.put("blockNumber", result.get("blockNumber"));
+        c.put("blockTimestamp", result.get("blockTimestamp"));
+        c.put("source", result.get("source"));
+        c.put("dex", result.get("dex"));
+        c.put("hops", hops);
+        return c;
     }
 
-    private Optional<SwapQuote> quotePool(LiquidityPool pool, String from, String to, BigDecimal amountIn) {
-        String token0 = normalize(pool.getToken0());
-        String token1 = normalize(pool.getToken1());
-
-        boolean forward = token0.equals(from) && token1.equals(to);
-        boolean reverse = token1.equals(from) && token0.equals(to);
-        if (!forward && !reverse) {
-            return Optional.empty();
-        }
-
-        BigDecimal reserveIn = forward ? pool.getReserve0() : pool.getReserve1();
-        BigDecimal reserveOut = forward ? pool.getReserve1() : pool.getReserve0();
-        if (reserveIn == null || reserveOut == null || reserveIn.signum() <= 0 || reserveOut.signum() <= 0) {
-            return Optional.empty();
-        }
-
-        BigDecimal amountInAfterFee = amountIn.multiply(ONE.subtract(FEE_RATE));
-        BigDecimal numerator = amountInAfterFee.multiply(reserveOut);
-        BigDecimal denominator = reserveIn.add(amountInAfterFee);
-        if (denominator.signum() <= 0) {
-            return Optional.empty();
-        }
-
-        BigDecimal amountOut = numerator.divide(denominator, 8, RoundingMode.HALF_UP);
-        BigDecimal spotPrice = reserveOut.divide(reserveIn, 8, RoundingMode.HALF_UP);
-        BigDecimal grossAmountOut = amountIn.multiply(spotPrice).setScale(8, RoundingMode.HALF_UP);
-        BigDecimal priceImpact = grossAmountOut.signum() == 0
-                ? BigDecimal.ZERO
-                : grossAmountOut.subtract(amountOut)
-                    .divide(grossAmountOut, 6, RoundingMode.HALF_UP)
-                    .multiply(new BigDecimal("100"));
-
-        return Optional.of(new SwapQuote(pool.getPoolAddress(), amountOut, grossAmountOut, priceImpact));
-    }
-
-    private Map<String, Object> toMap(RouteCandidate candidate) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("path", candidate.path());
-        map.put("viable", candidate.viable());
-        map.put("type", candidate.type());
-        map.put("reasonCode", candidate.reasonCode());
-        map.put("reason", candidate.reason());
-        map.put("poolAddresses", candidate.poolAddresses());
-        map.put("amountOut", candidate.amountOut());
-        map.put("grossAmountOut", candidate.grossAmountOut());
-        map.put("gasCostUsd", candidate.gasCostUsd());
-        map.put("priceImpactPct", candidate.priceImpactPct());
-        map.put("netScore", candidate.netOutput());
-        return map;
+    private Map<String, Object> unsupportedCandidate(String source, String target,
+                                                      String reasonCode, String reason) {
+        Map<String, Object> c = new LinkedHashMap<>();
+        c.put("path", List.of(source, target));
+        c.put("type", "UNSUPPORTED");
+        c.put("label", source + " → " + target);
+        c.put("viable", false);
+        c.put("eliminationReason", reason);
+        c.put("reasonCode", reasonCode);
+        c.put("poolAddresses", List.of());
+        c.put("hopCount", 0);
+        c.put("amountOut", BigDecimal.ZERO);
+        c.put("grossAmountOut", BigDecimal.ZERO);
+        c.put("gasCostUsd", BigDecimal.ZERO);
+        c.put("priceImpactPct", BigDecimal.ZERO);
+        c.put("netScore", BigDecimal.ZERO);
+        c.put("source", "unsupported");
+        return c;
     }
 
     private String normalize(String token) {
-        return token == null ? "" : token.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private record SwapQuote(String poolAddress, BigDecimal amountOut, BigDecimal grossAmountOut, BigDecimal priceImpactPct) {
-    }
-
-    private record RouteCandidate(
-            List<String> path,
-            boolean viable,
-            String type,
-            String reasonCode,
-            String reason,
-            List<String> poolAddresses,
-            BigDecimal amountOut,
-            BigDecimal grossAmountOut,
-            BigDecimal gasCostUsd,
-            BigDecimal priceImpactPct
-    ) {
-        static RouteCandidate accepted(List<String> path,
-                                       BigDecimal amountOut,
-                                       BigDecimal grossAmountOut,
-                                       BigDecimal priceImpactPct,
-                                       BigDecimal gasCostUsd,
-                                       String type,
-                                       List<String> poolAddresses) {
-            return new RouteCandidate(path, true, type, null, "可用路径", poolAddresses, amountOut, grossAmountOut, gasCostUsd, priceImpactPct);
-        }
-
-        static RouteCandidate rejected(List<String> path, String reasonCode, String reason) {
-            return new RouteCandidate(path, false, "REJECTED", reasonCode, reason, List.of(), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-        }
-
-        BigDecimal netOutput() {
-            return amountOut.subtract(gasCostUsd);
-        }
+        if (token == null) return "";
+        String v = token.trim().toUpperCase(Locale.ROOT);
+        return v.equals("ETH") ? "WETH" : v;
     }
 }

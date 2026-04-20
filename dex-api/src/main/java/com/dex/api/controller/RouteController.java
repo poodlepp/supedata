@@ -33,4 +33,11 @@ public class RouteController {
                                 @RequestParam(value = "amountIn", required = false) BigDecimal amountIn) {
         return ApiResponse.success(routeService.quote(from, to, amountIn));
     }
+
+    @GetMapping("/compare")
+    public ApiResponse<?> compare(@RequestParam("from") String from,
+                                  @RequestParam("to") String to,
+                                  @RequestParam(value = "amountIn", required = false) BigDecimal amountIn) {
+        return ApiResponse.success(routeService.compare(from, to, amountIn));
+    }
 }

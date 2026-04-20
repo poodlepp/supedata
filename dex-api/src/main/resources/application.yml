@@ -54,6 +54,9 @@ blockchain:
   mainnet:
     rpc-url: ${MAINNET_RPC_URL:https://mainnet.infura.io/v3/c4d9767c95884ede9a0613c02eca0870}
     ws-url: ${MAINNET_WS_URL:wss://mainnet.infura.io/ws/v3/c4d9767c95884ede9a0613c02eca0870}
+    connect-timeout-ms: ${MAINNET_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${MAINNET_READ_TIMEOUT_MS:4000}
+    call-timeout-ms: ${MAINNET_CALL_TIMEOUT_MS:5000}
     chain-id: 1
     network-name: Ethereum Mainnet
   univ3:
@@ -77,4 +80,3 @@ logging:
 
 server:
   port: 8080
-
