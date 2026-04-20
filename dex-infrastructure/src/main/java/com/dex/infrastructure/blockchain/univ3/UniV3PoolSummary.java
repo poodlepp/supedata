@@ -20,4 +20,5 @@ public class UniV3PoolSummary {
     private Long latestEventTime;
     private Map<String, Long> eventCounts;
     private String status;
+    private String errorMessage;
 }

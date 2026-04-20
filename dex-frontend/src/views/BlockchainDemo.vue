@@ -13,35 +13,44 @@
     </section>
 
     <el-alert v-if="error" :title="error" type="error" :closable="true" @close="error = null" />
+    <el-alert
+      v-if="scanError"
+      :title="scanError"
+      type="warning"
+      :closable="false"
+    />
 
     <section class="metrics-grid">
       <article class="metric-card"><span>Connection</span><strong>{{ isConnected ? 'ONLINE' : 'OFFLINE' }}</strong><small>{{ network }}</small></article>
-      <article class="metric-card"><span>ETH / USDT</span><strong>{{ ethUsdtPrice.toFixed(2) }}</strong><small>{{ formatTime(lastUpdateTime) }}</small></article>
-      <article class="metric-card"><span>Latest Block</span><strong>{{ latestBlock || '--' }}</strong><small>最新区块高度</small></article>
-      <article class="metric-card"><span>Swap Events</span><strong>{{ swapEvents.length }}</strong><small>当前展示最新 {{ sampledSwapEvents.length }} 条</small></article>
+      <article class="metric-card"><span>Latest Block</span><strong>{{ scanProgress.latestBlock || latestBlock || '--' }}</strong><small>{{ scanProgress.status || '阶段 1 块高' }}</small></article>
+      <article class="metric-card"><span>Committed Block</span><strong>{{ scanProgress.latestCommittedBlock ?? '--' }}</strong><small>检查点落库进度</small></article>
+      <article class="metric-card"><span>Sync Lag</span><strong>{{ scanProgress.syncLag ?? '--' }}</strong><small>当前同步延迟</small></article>
     </section>
 
     <section class="panel info-panel">
       <div class="panel-head">
         <div>
-          <div class="eyebrow">SYSTEM MATRIX</div>
-          <h2>监听总览</h2>
+          <div class="eyebrow">STAGE 1 MATRIX</div>
+          <h2>读链与同步总览</h2>
         </div>
-        <span class="pill" :class="isListening ? 'live' : 'idle'">{{ isListening ? 'LIVE' : 'IDLE' }}</span>
+        <span class="pill" :class="scanProgress.status === 'RUNNING' ? 'live' : 'idle'">{{ scanProgress.status || 'UNKNOWN' }}</span>
       </div>
       <div class="info-grid">
         <div><span>网络</span><strong>{{ network }}</strong></div>
+        <div><span>Pool</span><strong>{{ scanProgress.poolName || 'Uniswap V3 WETH/USDC 0.05%' }}</strong></div>
+        <div><span>起始块</span><strong>{{ scanProgress.startBlock ?? '--' }}</strong></div>
+        <div><span>安全块高</span><strong>{{ scanProgress.safeLatestBlock ?? '--' }}</strong></div>
+        <div><span>最新事件时间</span><strong>{{ formatTime(scanProgress.latestEventTime) }}</strong></div>
+        <div><span>事件总数</span><strong>{{ scanProgress.totalEvents ?? 0 }}</strong></div>
         <div><span>监听状态</span><strong>{{ isListening ? '监听中' : '已停止' }}</strong></div>
-        <div><span>最新区块</span><strong>{{ latestBlock || '--' }}</strong></div>
-        <div><span>当前价格</span><strong>{{ ethUsdtPrice.toFixed(2) }} USDT</strong></div>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-head">
         <div>
-          <div class="eyebrow">SWAP TAPE</div>
-          <h2>Swap 事件流</h2>
+          <div class="eyebrow">CHAIN READ</div>
+          <h2>链上监听与 Swap 事件流</h2>
         </div>
         <div class="feed-tip">最新 {{ sampledSwapEvents.length }} 条 / 共 {{ swapEvents.length }} 条</div>
       </div>
@@ -83,11 +92,16 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBlockchainStore } from '@/stores/blockchainStore'
+import { getScanProgress } from '@/api/statistics'
 
 const blockchainStore = useBlockchainStore()
 const { isConnected, ethUsdtPrice, lastUpdateTime, network, latestBlock, isListening, loading, error, swapEvents, sampledSwapEvents } = storeToRefs(blockchainStore)
 
 const isFeedHovered = ref(false)
+const scanProgress = ref({})
+const scanError = ref('')
+let progressTimer = null
+
 const duplicatedSwapEvents = computed(() => sampledSwapEvents.value.length ? [...sampledSwapEvents.value, ...sampledSwapEvents.value] : [])
 const formatTime = (t) => !t ? '未更新' : new Date(t).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 const formatAmount = (v) => Number(v || 0).toFixed(4)
@@ -97,8 +111,27 @@ const openTxDetail = (txHash) => window.open(`https://etherscan.io/tx/${txHash}`
 const handleStartListener = async () => { await blockchainStore.startListener() }
 const handleStopListener = async () => { await blockchainStore.stopListener() }
 
-onMounted(async () => { await blockchainStore.init() })
-onUnmounted(() => { if (isListening.value) blockchainStore.stopListener() })
+const loadScanProgress = async () => {
+  try {
+    const response = await getScanProgress()
+    scanProgress.value = response.data.data || {}
+    scanError.value = scanProgress.value.errorMessage
+      ? `阶段 1 已进入降级状态：${scanProgress.value.errorMessage}`
+      : ''
+  } catch (err) {
+    scanError.value = err.message
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([blockchainStore.init(), loadScanProgress()])
+  progressTimer = setInterval(loadScanProgress, 5000)
+})
+
+onUnmounted(() => {
+  if (isListening.value) blockchainStore.stopListener()
+  if (progressTimer) clearInterval(progressTimer)
+})
 </script>
 
 <style scoped>

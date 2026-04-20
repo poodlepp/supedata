@@ -107,23 +107,47 @@ public class UniV3PoolIndexerService {
     }
 
     public UniV3PoolSummary getSummary() {
-        long latest = latestBlock();
-        long safeLatest = Math.max(0L, latest - confirmations);
-        UniV3IndexerCheckpoint checkpoint = ensureCheckpoint(safeLatest);
-        return UniV3PoolSummary.builder()
-                .chainId(CHAIN_ID)
-                .poolAddress(poolAddress)
-                .poolName(poolName)
-                .latestBlock(latest)
-                .safeLatestBlock(safeLatest)
-                .latestCommittedBlock(checkpoint.getLastCommittedBlock())
-                .startBlock(checkpoint.getStartBlock())
-                .syncLag(Math.max(0L, safeLatest - checkpoint.getLastCommittedBlock()))
-                .totalEvents(eventRepository.countAll(CHAIN_ID, poolAddress))
-                .latestEventTime(eventRepository.findLatestBlockTime(CHAIN_ID, poolAddress))
-                .eventCounts(eventRepository.countByType(CHAIN_ID, poolAddress))
-                .status(enabled ? "RUNNING" : "DISABLED")
-                .build();
+        try {
+            long latest = latestBlock();
+            long safeLatest = Math.max(0L, latest - confirmations);
+            UniV3IndexerCheckpoint checkpoint = ensureCheckpoint(safeLatest);
+            return UniV3PoolSummary.builder()
+                    .chainId(CHAIN_ID)
+                    .poolAddress(poolAddress)
+                    .poolName(poolName)
+                    .latestBlock(latest)
+                    .safeLatestBlock(safeLatest)
+                    .latestCommittedBlock(checkpoint.getLastCommittedBlock())
+                    .startBlock(checkpoint.getStartBlock())
+                    .syncLag(Math.max(0L, safeLatest - checkpoint.getLastCommittedBlock()))
+                    .totalEvents(safeTotalEvents())
+                    .latestEventTime(safeLatestEventTime())
+                    .eventCounts(safeEventCounts())
+                    .status(enabled ? "RUNNING" : "DISABLED")
+                    .build();
+        } catch (Exception e) {
+            log.warn("Failed to build UniV3 summary, fallback to degraded status", e);
+            UniV3IndexerCheckpoint checkpoint = checkpointRepository.find(CHAIN_ID, poolAddress);
+            long latestCommittedBlock = checkpoint != null && checkpoint.getLastCommittedBlock() != null
+                    ? checkpoint.getLastCommittedBlock() : 0L;
+            long startBlock = checkpoint != null && checkpoint.getStartBlock() != null
+                    ? checkpoint.getStartBlock() : 0L;
+            return UniV3PoolSummary.builder()
+                    .chainId(CHAIN_ID)
+                    .poolAddress(poolAddress)
+                    .poolName(poolName)
+                    .latestBlock(0L)
+                    .safeLatestBlock(0L)
+                    .latestCommittedBlock(latestCommittedBlock)
+                    .startBlock(startBlock)
+                    .syncLag(0L)
+                    .totalEvents(safeTotalEvents())
+                    .latestEventTime(safeLatestEventTime())
+                    .eventCounts(safeEventCounts())
+                    .status(enabled ? "RPC_UNAVAILABLE" : "DISABLED")
+                    .errorMessage(rootMessage(e))
+                    .build();
+        }
     }
 
     public List<UniV3PoolEvent> getRecentEvents(String eventType, int limit) {
@@ -217,6 +241,41 @@ public class UniV3PoolIndexerService {
         } catch (Exception e) {
             throw new IllegalStateException("Failed to fetch latest block", e);
         }
+    }
+
+    private long safeTotalEvents() {
+        try {
+            return eventRepository.countAll(CHAIN_ID, poolAddress);
+        } catch (Exception e) {
+            log.warn("Failed to count UniV3 events", e);
+            return 0L;
+        }
+    }
+
+    private Long safeLatestEventTime() {
+        try {
+            return eventRepository.findLatestBlockTime(CHAIN_ID, poolAddress);
+        } catch (Exception e) {
+            log.warn("Failed to load latest UniV3 event time", e);
+            return null;
+        }
+    }
+
+    private Map<String, Long> safeEventCounts() {
+        try {
+            return eventRepository.countByType(CHAIN_ID, poolAddress);
+        } catch (Exception e) {
+            log.warn("Failed to load UniV3 event counts", e);
+            return Map.of();
+        }
+    }
+
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 
     private List<DecodedEvent> scanRange(long fromBlock, long toBlock) {

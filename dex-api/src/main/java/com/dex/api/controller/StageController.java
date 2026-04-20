@@ -48,6 +48,7 @@ public class StageController {
         payload.put("poolAddress", summary.getPoolAddress());
         payload.put("poolName", summary.getPoolName());
         payload.put("syncDelayBlocks", summary.getSyncLag());
+        payload.put("errorMessage", summary.getErrorMessage());
         payload.put("generatedAt", System.currentTimeMillis());
         return ApiResponse.success(payload);
     }

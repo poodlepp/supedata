@@ -23,12 +23,7 @@ public class UniV3PoolController {
 
     @GetMapping("/summary")
     public ApiResponse<UniV3PoolSummary> summary() {
-        try {
-            return ApiResponse.success(uniV3PoolService.getSummary());
-        } catch (Exception e) {
-            log.error("Failed to query UniV3 summary", e);
-            return ApiResponse.error("Failed to load UniV3 summary: " + e.getMessage());
-        }
+        return ApiResponse.success(uniV3PoolService.getSummary());
     }
 
     @GetMapping("/events")
