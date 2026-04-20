@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,5 +21,9 @@ public class UniV3PoolService {
 
     public List<UniV3PoolEvent> getRecentEvents(String eventType, int limit) {
         return indexerService.getRecentEvents(eventType, limit);
+    }
+
+    public Map<String, Object> replayFromBlock(long fromBlock, Long toBlock, String reason) {
+        return indexerService.replayFromBlock(fromBlock, toBlock, reason);
     }
 }

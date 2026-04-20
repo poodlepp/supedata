@@ -1,6 +1,7 @@
 package com.dex.business.service;
 
 import com.dex.data.entity.Price;
+import com.dex.infrastructure.monitor.metrics.PrometheusMetrics;
 import com.dex.infrastructure.blockchain.univ3.RealPoolSnapshot;
 import com.dex.infrastructure.blockchain.univ3.UniV3RealPoolService;
 import lombok.RequiredArgsConstructor;
@@ -25,10 +26,11 @@ import java.util.Optional;
 public class PriceService {
 
     private final UniV3RealPoolService realPoolService;
+    private final PrometheusMetrics prometheusMetrics;
 
     public Optional<Price> getLatestPrice(String pair) {
         String normalized = normalizePair(pair);
-        return switch (normalized) {
+        Optional<Price> latest = switch (normalized) {
             case "ETH-USDC", "WETH-USDC" -> realPoolService.findPoolByPair("WETH", "USDC")
                     .map(pool -> toPrice("ETH-USDC", priceOf(pool, "WETH", "USDC"), pool.getBlockTimestamp()));
             case "ETH-DAI", "WETH-DAI" -> realPoolService.findPoolByPair("WETH", "DAI")
@@ -41,6 +43,9 @@ public class PriceService {
                     .map(pool -> toPrice("DAI-USDC", priceOf(pool, "DAI", "USDC"), pool.getBlockTimestamp()));
             default -> Optional.empty();
         };
+        latest.ifPresent(price -> prometheusMetrics.recordPriceFreshness(price.getPair(),
+                Math.max(0L, System.currentTimeMillis() - price.getTimestamp())));
+        return latest;
     }
 
     /** 返回价格历史快照列表（内存环形缓冲区，最多 120 条）。 */
@@ -94,7 +99,10 @@ public class PriceService {
     /** 异常检测：价格瞬时跳变超过阈值则返回告警。 */
     public List<Map<String, Object>> detectAnomalies(String pair, double thresholdPct) {
         List<Map<String, Object>> history = getPriceHistory(pair);
-        if (history.size() < 2) return List.of();
+        if (history.size() < 2) {
+            prometheusMetrics.recordPriceAnomalyCount(displayPair(pair), 0);
+            return List.of();
+        }
 
         List<Map<String, Object>> anomalies = new ArrayList<>();
         for (int i = 1; i < history.size(); i++) {
@@ -115,6 +123,7 @@ public class PriceService {
                 anomalies.add(alert);
             }
         }
+        prometheusMetrics.recordPriceAnomalyCount(displayPair(pair), anomalies.size());
         return anomalies;
     }
 
@@ -159,6 +168,10 @@ public class PriceService {
         if (pair == null) return "";
         String v = pair.trim().toUpperCase(Locale.ROOT).replace('/', '-').replace('_', '-');
         return v.startsWith("ETH-") ? "WETH-" + v.substring(4) : v;
+    }
+
+    private String displayPair(String pair) {
+        return normalizePair(pair).replace("WETH", "ETH");
     }
 
     private BigDecimal invert(BigDecimal value) {

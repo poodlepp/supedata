@@ -51,9 +51,9 @@ public class StageStatusService {
                 stage("阶段 0", "工程底座", true, List.of("多模块工程", "Actuator Health", "前后端可启动")),
                 stage("阶段 1", "单链读链与原始同步", true, List.of("主网连接检查", "最新区块接口", "UniV3 检查点/续传")),
                 stage("阶段 2", "DEX 协议索引与标准化", true, List.of("UniV3 事件入库", "标准化事件查询", "同 pool 顺序保持")),
-                stage("阶段 3", "派生指标与数据服务", true, List.of("真实价格接口", "真实池概览", "首页总览缓存快照")),
+                stage("阶段 3", "派生指标与数据服务", true, List.of("真实价格接口", "价格历史/K线", "TVL 估算与首页总览缓存")),
                 stage("阶段 4", "报价与路由引擎", true, List.of("ETH/USDC 真报价", "少量真实池支持", "返回 pool / fee / block 元信息")),
-                stage("阶段 5", "实时化与运维能力", false, List.of("实时推送", "告警", "补数/回放")),
+                stage("阶段 5", "实时化与运维能力", true, List.of("SSE 实时价格推送", "延迟告警与运维总览", "手动回放/补数触发")),
                 stage("阶段 6", "重量级能力", false, List.of("多链抽象", "多协议池图", "历史回测导出"))
         );
     }

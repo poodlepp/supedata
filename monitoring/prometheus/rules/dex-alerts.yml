@@ -1,0 +1,62 @@
+groups:
+  - name: dex-core-alerts
+    rules:
+      - alert: DexApiDown
+        expr: up{job="dex-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: dex
+        annotations:
+          summary: dex-api unavailable
+          description: dex-api has been unreachable for more than 1 minute.
+
+      - alert: DexIndexerSyncLagHigh
+        expr: dex_sync_lag_blocks > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: dex
+        annotations:
+          summary: indexer sync lag is high
+          description: Sync lag has been above 30 blocks for over 5 minutes.
+
+      - alert: DexEventDelayHigh
+        expr: dex_latest_event_lag_ms > 180000
+        for: 5m
+        labels:
+          severity: critical
+          team: dex
+        annotations:
+          summary: indexed event data is stale
+          description: Latest indexed event is older than 3 minutes for over 5 minutes.
+
+      - alert: DexKafkaFailuresDetected
+        expr: increase(dex_kafka_failures_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: dex
+        annotations:
+          summary: kafka failures detected
+          description: Kafka publish or consume failures happened in the last 10 minutes.
+
+      - alert: DexRouteLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le, operation) (rate(dex_route_request_latency_seconds_bucket[10m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: dex
+        annotations:
+          summary: route latency p95 is high
+          description: Route {{ $labels.operation }} p95 latency has been above 2 seconds for 10 minutes.
+
+      - alert: DexActiveCriticalAlertsPresent
+        expr: dex_ops_critical_alerts > 0
+        for: 2m
+        labels:
+          severity: critical
+          team: dex
+        annotations:
+          summary: critical ops alerts present
+          description: At least one critical ops alert is active.

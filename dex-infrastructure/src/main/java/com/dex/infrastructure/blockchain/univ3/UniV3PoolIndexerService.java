@@ -4,6 +4,7 @@ import com.dex.data.entity.UniV3IndexerCheckpoint;
 import com.dex.data.entity.UniV3PoolEvent;
 import com.dex.data.repository.UniV3IndexerCheckpointRepository;
 import com.dex.data.repository.UniV3PoolEventRepository;
+import com.dex.infrastructure.monitor.metrics.PrometheusMetrics;
 import jakarta.annotation.PostConstruct;
 import lombok.Builder;
 import lombok.Data;
@@ -57,6 +58,7 @@ public class UniV3PoolIndexerService {
     private final UniV3PoolEventRepository eventRepository;
     private final UniV3IndexerCheckpointRepository checkpointRepository;
     private final UniV3KafkaProducer kafkaProducer;
+    private final PrometheusMetrics prometheusMetrics;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Map<Long, Long> blockTimeCache = new ConcurrentHashMap<>();
@@ -111,6 +113,15 @@ public class UniV3PoolIndexerService {
             long latest = latestBlock();
             long safeLatest = Math.max(0L, latest - confirmations);
             UniV3IndexerCheckpoint checkpoint = ensureCheckpoint(safeLatest);
+            Long latestEventTime = safeLatestEventTime();
+            long syncLag = Math.max(0L, safeLatest - checkpoint.getLastCommittedBlock());
+            prometheusMetrics.recordBlockScanHeight(safeLatest);
+            prometheusMetrics.recordCommittedBlock(checkpoint.getLastCommittedBlock());
+            prometheusMetrics.recordSyncLagBlocks(syncLag);
+            prometheusMetrics.recordLatestEventTimestamp(latestEventTime);
+            if (latestEventTime != null) {
+                prometheusMetrics.recordLatestEventLagMs(System.currentTimeMillis() - latestEventTime);
+            }
             return UniV3PoolSummary.builder()
                     .chainId(CHAIN_ID)
                     .poolAddress(poolAddress)
@@ -119,9 +130,9 @@ public class UniV3PoolIndexerService {
                     .safeLatestBlock(safeLatest)
                     .latestCommittedBlock(checkpoint.getLastCommittedBlock())
                     .startBlock(checkpoint.getStartBlock())
-                    .syncLag(Math.max(0L, safeLatest - checkpoint.getLastCommittedBlock()))
+                    .syncLag(syncLag)
                     .totalEvents(safeTotalEvents())
-                    .latestEventTime(safeLatestEventTime())
+                    .latestEventTime(latestEventTime)
                     .eventCounts(safeEventCounts())
                     .status(enabled ? "RUNNING" : "DISABLED")
                     .build();
@@ -154,10 +165,53 @@ public class UniV3PoolIndexerService {
         return eventRepository.findRecentEvents(CHAIN_ID, poolAddress, eventType, limit);
     }
 
+    public Map<String, Object> replayFromBlock(long fromBlock, Long requestedToBlock, String reason) {
+        if (!enabled) {
+            throw new IllegalStateException("UniV3 indexer is disabled");
+        }
+        lock.lock();
+        try {
+            long latest = latestBlock();
+            long safeLatest = Math.max(0L, latest - confirmations);
+            UniV3IndexerCheckpoint checkpoint = ensureCheckpoint(safeLatest);
+            long effectiveFromBlock = Math.max(checkpoint.getStartBlock(), fromBlock);
+            if (effectiveFromBlock > safeLatest) {
+                throw new IllegalArgumentException("Replay fromBlock exceeds current safe latest block");
+            }
+
+            eventRepository.deleteFromBlock(CHAIN_ID, poolAddress, effectiveFromBlock);
+            checkpointRepository.rollbackTo(CHAIN_ID, poolAddress, effectiveFromBlock - 1);
+            blockTimeCache.entrySet().removeIf(entry -> entry.getKey() >= effectiveFromBlock);
+            prometheusMetrics.recordReplay(effectiveFromBlock);
+
+            syncOnce();
+
+            UniV3PoolSummary summary = getSummary();
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("status", "SUCCESS");
+            payload.put("reason", reason == null || reason.isBlank() ? "manual replay" : reason);
+            payload.put("requestedFromBlock", fromBlock);
+            payload.put("requestedToBlock", requestedToBlock);
+            payload.put("effectiveFromBlock", effectiveFromBlock);
+            payload.put("effectiveToBlock", summary.getLatestCommittedBlock());
+            payload.put("mode", "replay-from-block-to-safe-latest");
+            payload.put("latestCommittedBlock", summary.getLatestCommittedBlock());
+            payload.put("safeLatestBlock", summary.getSafeLatestBlock());
+            payload.put("syncLag", summary.getSyncLag());
+            payload.put("generatedAt", System.currentTimeMillis());
+            return payload;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private void syncOnce() {
         long latest = latestBlock();
         long safeLatest = Math.max(0L, latest - confirmations);
         UniV3IndexerCheckpoint checkpoint = ensureCheckpoint(safeLatest);
+        prometheusMetrics.recordBlockScanHeight(safeLatest);
+        prometheusMetrics.recordCommittedBlock(checkpoint.getLastCommittedBlock());
+        prometheusMetrics.recordSyncLagBlocks(Math.max(0L, safeLatest - checkpoint.getLastCommittedBlock()));
 
         if (safeLatest - checkpoint.getLastCommittedBlock() <= Math.max(reorgWindow * 2L, scanChunkSize)) {
             maybeHandleReorg(checkpoint);
@@ -190,6 +244,7 @@ public class UniV3PoolIndexerService {
                     lastSeenBlockHash = blockHash;
                 }
                 checkpointRepository.updateScanProgress(CHAIN_ID, poolAddress, currentBlock);
+                prometheusMetrics.recordBlockScanHeight(currentBlock);
                 currentBlock++;
             }
             fromBlock = toBlock + 1;

@@ -1,6 +1,7 @@
 package com.dex.business.service;
 
 import com.dex.infrastructure.blockchain.univ3.UniV3RealPoolService;
+import com.dex.infrastructure.monitor.metrics.PrometheusMetrics;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -17,12 +18,13 @@ class PriceServiceTest {
     @Test
     void historyShouldInvertUsdcWethSeriesForEthUsdcRequests() {
         UniV3RealPoolService realPoolService = mock(UniV3RealPoolService.class);
+        PrometheusMetrics prometheusMetrics = mock(PrometheusMetrics.class);
         when(realPoolService.getPriceHistory("USDC", "WETH")).thenReturn(List.of(
                 new UniV3RealPoolService.PricePoint(1_712_000_000_000L, new BigDecimal("0.000322"), 20_000_000L),
                 new UniV3RealPoolService.PricePoint(1_712_000_015_000L, new BigDecimal("0.000321"), 20_000_001L)
         ));
 
-        PriceService priceService = new PriceService(realPoolService);
+        PriceService priceService = new PriceService(realPoolService, prometheusMetrics);
         List<Map<String, Object>> history = priceService.getPriceHistory("ETH-USDC");
 
         assertEquals(2, history.size());
@@ -36,11 +38,12 @@ class PriceServiceTest {
     @Test
     void historyShouldKeepOriginalDirectionForUsdcEthRequests() {
         UniV3RealPoolService realPoolService = mock(UniV3RealPoolService.class);
+        PrometheusMetrics prometheusMetrics = mock(PrometheusMetrics.class);
         when(realPoolService.getPriceHistory("USDC", "WETH")).thenReturn(List.of(
                 new UniV3RealPoolService.PricePoint(1_712_000_000_000L, new BigDecimal("0.000322"), 20_000_000L)
         ));
 
-        PriceService priceService = new PriceService(realPoolService);
+        PriceService priceService = new PriceService(realPoolService, prometheusMetrics);
         List<Map<String, Object>> history = priceService.getPriceHistory("USDC-ETH");
 
         assertEquals(1, history.size());

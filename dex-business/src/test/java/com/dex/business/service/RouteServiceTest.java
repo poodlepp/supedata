@@ -2,176 +2,297 @@ package com.dex.business.service;
 
 import com.dex.infrastructure.blockchain.univ3.RealPoolSnapshot;
 import com.dex.infrastructure.blockchain.univ3.UniV3RealPoolService;
+import com.dex.infrastructure.monitor.metrics.PrometheusMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RouteServiceTest {
 
+    private static final long NOW = System.currentTimeMillis();
+
     private UniV3RealPoolService realPoolService;
+    private PrometheusMetrics prometheusMetrics;
     private RouteService routeService;
 
-    private static final RealPoolSnapshot WETH_USDC_500 = RealPoolSnapshot.builder()
-            .poolAddress("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640")
-            .poolName("Uniswap V3 USDC/WETH 0.05%")
-            .dex("Uniswap V3")
-            .token0Symbol("USDC").token1Symbol("WETH")
-            .token0Address("0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
-            .token1Address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-            .token0Decimals(6).token1Decimals(18)
-            .fee(500).blockNumber(20000000L).blockTimestamp(1_712_000_000_000L)
-            .priceToken0InToken1(new BigDecimal("0.000322"))
-            .priceToken1InToken0(new BigDecimal("3105"))
-            .reserve0(new BigDecimal("1200000")).reserve1(new BigDecimal("386"))
-            .build();
-
-    private static final RealPoolSnapshot WETH_USDC_3000 = RealPoolSnapshot.builder()
-            .poolAddress("0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8")
-            .poolName("Uniswap V3 USDC/WETH 0.30%")
-            .dex("Uniswap V3")
-            .token0Symbol("USDC").token1Symbol("WETH")
-            .token0Address("0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
-            .token1Address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-            .token0Decimals(6).token1Decimals(18)
-            .fee(3000).blockNumber(20000000L).blockTimestamp(1_712_000_000_000L)
-            .priceToken0InToken1(new BigDecimal("0.000321"))
-            .priceToken1InToken0(new BigDecimal("3115"))
-            .reserve0(new BigDecimal("800000")).reserve1(new BigDecimal("257"))
-            .build();
+    private static final RealPoolSnapshot WETH_USDC_500 = pool(
+            "0xpool-weth-usdc-500", "Uniswap V3 USDC/WETH 0.05%", "USDC", "WETH",
+            500, "0.000322", "3105", "1200000", "386", "1000000");
+    private static final RealPoolSnapshot WETH_USDC_3000 = pool(
+            "0xpool-weth-usdc-3000", "Uniswap V3 USDC/WETH 0.30%", "USDC", "WETH",
+            3000, "0.000321", "3115", "800000", "257", "800000");
+    private static final RealPoolSnapshot WETH_DAI_500 = pool(
+            "0xpool-weth-dai-500", "Uniswap V3 DAI/WETH 0.05%", "DAI", "WETH",
+            500, "0.000323", "3095", "1500000", "484", "1500000");
+    private static final RealPoolSnapshot WETH_DAI_3000 = pool(
+            "0xpool-weth-dai-3000", "Uniswap V3 DAI/WETH 0.30%", "DAI", "WETH",
+            3000, "0.000322", "3100", "1800000", "580", "1800000");
+    private static final RealPoolSnapshot DAI_USDC_100 = pool(
+            "0xpool-dai-usdc-100", "Uniswap V3 DAI/USDC 0.01%", "DAI", "USDC",
+            100, "1.0002", "0.9998", "2200000", "2200000", "2200000");
+    private static final RealPoolSnapshot DAI_USDC_500 = pool(
+            "0xpool-dai-usdc-500", "Uniswap V3 DAI/USDC 0.05%", "DAI", "USDC",
+            500, "1.0000", "1.0000", "1400000", "1400000", "1400000");
 
     @BeforeEach
     void setUp() {
         realPoolService = mock(UniV3RealPoolService.class);
-        routeService = new RouteService(realPoolService);
-    }
-
-    private static Map<String, Object> singleQuoteResult(String poolAddress, String poolName, int fee,
-                                                          String amountOut, String priceImpact) {
-        Map<String, Object> m = new java.util.LinkedHashMap<>();
-        m.put("supported", true);
-        m.put("amountOut", new BigDecimal(amountOut));
-        m.put("grossAmountOut", new BigDecimal(amountOut).add(BigDecimal.ONE));
-        m.put("priceImpactPct", new BigDecimal(priceImpact));
-        m.put("poolAddress", poolAddress);
-        m.put("poolName", poolName);
-        m.put("fee", fee);
-        m.put("blockNumber", 20000000L);
-        m.put("blockTimestamp", 1_712_000_000_000L);
-        m.put("source", "uniswap-v3-quoter-v1");
-        m.put("dex", "Uniswap V3");
-        m.put("tokenIn", "WETH");
-        m.put("tokenOut", "USDC");
-        return m;
+        prometheusMetrics = mock(PrometheusMetrics.class);
+        routeService = new RouteService(realPoolService, prometheusMetrics);
     }
 
     @Test
-    void quoteShouldReturnBestCandidateWhenDirectPoolExists() {
-        when(realPoolService.findAllPoolsByPair(anyString(), anyString()))
-                .thenReturn(List.of());
-        when(realPoolService.findAllPoolsByPair("WETH", "USDC"))
-                .thenReturn(List.of(WETH_USDC_500, WETH_USDC_3000));
-
-        Map<String, Object> singleResult = singleQuoteResult(
-                WETH_USDC_500.getPoolAddress(), WETH_USDC_500.getPoolName(), 500, "3100", "0.16");
+    void quoteShouldReturnBestDirectPoolWhenDirectRouteWins() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(WETH_USDC_500, WETH_USDC_3000));
         when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), any()))
-                .thenReturn(singleResult);
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "3100", "3110"));
         when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_3000), eq("WETH"), eq("USDC"), any()))
-                .thenReturn(singleQuoteResult(
-                        WETH_USDC_3000.getPoolAddress(), WETH_USDC_3000.getPoolName(), 3000, "3090", "0.22"));
-        when(realPoolService.quoteMultiHopExactInput(anyList(), any()))
-                .thenReturn(Map.of("supported", false, "reason", "HOP_FAILED", "message", "no pool"));
+                .thenReturn(singleQuoteResult(WETH_USDC_3000, "WETH", "USDC", "3090", "3100"));
 
         Map<String, Object> result = routeService.quote("ETH", "USDC", BigDecimal.ONE);
 
+        assertEquals("WETH", result.get("fromToken"));
+        assertEquals("layered-beam-search-real-pools", result.get("mode"));
         assertNotNull(result.get("best"));
         @SuppressWarnings("unchecked")
+        Map<String, Object> best = (Map<String, Object>) result.get("best");
+        assertEquals(500, best.get("fee"));
+
+        @SuppressWarnings("unchecked")
         List<Map<String, Object>> candidates = (List<Map<String, Object>>) result.get("candidates");
-        assertEquals(3, candidates.size());
-        assertEquals(500, ((Map<?, ?>) result.get("best")).get("fee"));
-        assertEquals("multi-path-real-pools", result.get("mode"));
+        assertEquals(2, candidates.size());
+        assertEquals(new BigDecimal("3098.80000000"), best.get("netScore"));
     }
 
     @Test
-    void compareShouldReturnRankedAndEliminatedLists() {
-        when(realPoolService.findAllPoolsByPair(anyString(), anyString()))
-                .thenReturn(List.of());
-        when(realPoolService.findAllPoolsByPair("WETH", "USDC"))
-                .thenReturn(List.of(WETH_USDC_500));
-
-        Map<String, Object> singleResult = singleQuoteResult(
-                WETH_USDC_500.getPoolAddress(), WETH_USDC_500.getPoolName(), 500, "3100", "0.16");
+    void quoteShouldChooseMultiHopWhenGasAdjustedOutputIsHigher() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(WETH_USDC_500, WETH_DAI_3000, DAI_USDC_100));
         when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), any()))
-                .thenReturn(singleResult);
-        when(realPoolService.quoteMultiHopExactInput(anyList(), any()))
-                .thenReturn(Map.of("supported", false, "reason", "NO_POOL", "message", "no pool"));
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "3100", "3110"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_DAI_3000), eq("WETH"), eq("DAI"), any()))
+                .thenReturn(singleQuoteResult(WETH_DAI_3000, "WETH", "DAI", "3200", "3215"));
+        when(realPoolService.quoteExactInputSingle(eq(DAI_USDC_100), eq("DAI"), eq("USDC"), any()))
+                .thenReturn(singleQuoteResult(DAI_USDC_100, "DAI", "USDC", "3103", "3110"));
+
+        Map<String, Object> result = routeService.quote("ETH", "USDC", BigDecimal.ONE);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> best = (Map<String, Object>) result.get("best");
+        assertEquals(List.of("WETH", "DAI", "USDC"), best.get("path"));
+        assertEquals(new BigDecimal("3100.60000000"), best.get("netScore"));
+        assertEquals(new BigDecimal("2.40000000"), best.get("gasCostUsd"));
+    }
+
+    @Test
+    void compareShouldExposeSplitOptionWhenSplitBeatsBestSingleRoute() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(WETH_USDC_500, WETH_USDC_3000));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), argThat(amountEq("1"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "3000", "3020"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_3000), eq("WETH"), eq("USDC"), argThat(amountEq("1"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_3000, "WETH", "USDC", "2995", "3015"));
+
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), argThat(amountEq("0.50"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "1565", "1575"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_3000), eq("WETH"), eq("USDC"), argThat(amountEq("0.50"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_3000, "WETH", "USDC", "1558", "1568"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), argThat(amountEq("0.25"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "785", "790"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_3000), eq("WETH"), eq("USDC"), argThat(amountEq("0.25"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_3000, "WETH", "USDC", "780", "786"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), argThat(amountEq("0.75"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "2340", "2355"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_3000), eq("WETH"), eq("USDC"), argThat(amountEq("0.75"))))
+                .thenReturn(singleQuoteResult(WETH_USDC_3000, "WETH", "USDC", "2325", "2340"));
 
         Map<String, Object> result = routeService.compare("ETH", "USDC", BigDecimal.ONE);
 
-        assertNotNull(result.get("ranked"));
-        assertNotNull(result.get("eliminated"));
-        assertTrue((int) result.get("viableCount") >= 0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> bestExecution = (Map<String, Object>) result.get("bestExecution");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> splitOptions = (List<Map<String, Object>>) result.get("splitOptions");
+
+        assertEquals("SPLIT", bestExecution.get("executionType"));
+        assertFalse(splitOptions.isEmpty());
+        assertTrue((Boolean) splitOptions.getFirst().get("betterThanBestSingle"));
     }
 
     @Test
-    void quoteShouldReturnUnsupportedWhenNoPools() {
-        when(realPoolService.findAllPoolsByPair(anyString(), anyString())).thenReturn(List.of());
-        when(realPoolService.quoteMultiHopExactInput(anyList(), any()))
-                .thenReturn(Map.of("supported", false, "reason", "NO_POOL", "message", "no pool"));
+    void compareShouldEnumerateMultiplePoolCombinationsAcrossHops() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(
+                WETH_DAI_500, WETH_DAI_3000, DAI_USDC_100, DAI_USDC_500
+        ));
+
+        when(realPoolService.quoteExactInputSingle(eq(WETH_DAI_500), eq("WETH"), eq("DAI"), any()))
+                .thenReturn(singleQuoteResult(WETH_DAI_500, "WETH", "DAI", "3200", "3210"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_DAI_3000), eq("WETH"), eq("DAI"), any()))
+                .thenReturn(singleQuoteResult(WETH_DAI_3000, "WETH", "DAI", "3210", "3225"));
+
+        when(realPoolService.quoteExactInputSingle(eq(DAI_USDC_100), eq("DAI"), eq("USDC"), argThat(amountEq("3200"))))
+                .thenReturn(singleQuoteResult(DAI_USDC_100, "DAI", "USDC", "3099", "3104"));
+        when(realPoolService.quoteExactInputSingle(eq(DAI_USDC_500), eq("DAI"), eq("USDC"), argThat(amountEq("3200"))))
+                .thenReturn(singleQuoteResult(DAI_USDC_500, "DAI", "USDC", "3097", "3101"));
+        when(realPoolService.quoteExactInputSingle(eq(DAI_USDC_100), eq("DAI"), eq("USDC"), argThat(amountEq("3210"))))
+                .thenReturn(singleQuoteResult(DAI_USDC_100, "DAI", "USDC", "3105", "3112"));
+        when(realPoolService.quoteExactInputSingle(eq(DAI_USDC_500), eq("DAI"), eq("USDC"), argThat(amountEq("3210"))))
+                .thenReturn(singleQuoteResult(DAI_USDC_500, "DAI", "USDC", "3100", "3108"));
+
+        Map<String, Object> result = routeService.compare("ETH", "USDC", BigDecimal.ONE);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> ranked = (List<Map<String, Object>>) result.get("ranked");
+        assertEquals(4, ranked.size());
+        assertEquals(List.of("0xpool-weth-dai-3000", "0xpool-dai-usdc-100"), ranked.getFirst().get("poolAddresses"));
+        assertEquals(new BigDecimal("3102.60000000"), ranked.getFirst().get("netScore"));
+    }
+
+    @Test
+    void layeredExpansionShouldAvoidRevisitingTokens() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(WETH_USDC_500, WETH_DAI_3000));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), any()))
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "3100", "3110"));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_DAI_3000), eq("WETH"), eq("DAI"), any()))
+                .thenReturn(singleQuoteResult(WETH_DAI_3000, "WETH", "DAI", "3200", "3215"));
+
+        Map<String, Object> result = routeService.compare("ETH", "USDC", BigDecimal.ONE);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> ranked = (List<Map<String, Object>>) result.get("ranked");
+        assertEquals(1, ranked.size());
+        assertEquals(List.of("WETH", "USDC"), ranked.getFirst().get("path"));
+    }
+
+    @Test
+    void quoteShouldReturnUnsupportedWhenNoPoolsExist() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of());
 
         Map<String, Object> result = routeService.quote("UNKNOWN", "TOKEN", BigDecimal.ONE);
 
         assertNull(result.get("best"));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> candidates = (List<Map<String, Object>>) result.get("candidates");
-        assertFalse(candidates.isEmpty());
+        assertEquals(1, candidates.size());
         assertFalse((Boolean) candidates.getFirst().get("viable"));
     }
 
     @Test
-    void ethShouldBeNormalizedToWeth() {
-        when(realPoolService.findAllPoolsByPair(anyString(), anyString()))
-                .thenReturn(List.of());
-        when(realPoolService.findAllPoolsByPair("WETH", "USDC"))
-                .thenReturn(List.of(WETH_USDC_500));
+    void compareShouldSeparateRankedAndEliminatedByPriceImpact() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(WETH_USDC_500, WETH_USDC_3000));
         when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), any()))
-                .thenReturn(singleQuoteResult("0xpool", "test", 500, "3100", "0.16"));
-        when(realPoolService.quoteMultiHopExactInput(anyList(), any()))
-                .thenReturn(Map.of("supported", false, "reason", "NO_POOL", "message", "no pool"));
-
-        Map<String, Object> result = routeService.quote("ETH", "USDC", BigDecimal.ONE);
-        assertEquals("WETH", result.get("fromToken"));
-    }
-
-    @Test
-    void compareShouldKeepFeeTierQuotesDistinct() {
-        when(realPoolService.findAllPoolsByPair(anyString(), anyString()))
-                .thenReturn(List.of());
-        when(realPoolService.findAllPoolsByPair("WETH", "USDC"))
-                .thenReturn(List.of(WETH_USDC_500, WETH_USDC_3000));
-        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), any()))
-                .thenReturn(singleQuoteResult(
-                        WETH_USDC_500.getPoolAddress(), WETH_USDC_500.getPoolName(), 500, "3100", "0.16"));
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "3100", "3110"));
         when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_3000), eq("WETH"), eq("USDC"), any()))
-                .thenReturn(singleQuoteResult(
-                        WETH_USDC_3000.getPoolAddress(), WETH_USDC_3000.getPoolName(), 3000, "3120", "0.18"));
-        when(realPoolService.quoteMultiHopExactInput(anyList(), any()))
-                .thenReturn(Map.of("supported", false, "reason", "NO_POOL", "message", "no pool"));
+                .thenReturn(singleQuoteResult(WETH_USDC_3000, "WETH", "USDC", "2800", "3000"));
 
         Map<String, Object> result = routeService.compare("ETH", "USDC", BigDecimal.ONE);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> ranked = (List<Map<String, Object>>) result.get("ranked");
-        assertEquals(2, ranked.size());
-        assertEquals(3000, ranked.getFirst().get("fee"));
-        assertEquals(new BigDecimal("3120"), ranked.getFirst().get("amountOut"));
-        assertEquals(500, ranked.get(1).get("fee"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> eliminated = (List<Map<String, Object>>) result.get("eliminated");
+        assertEquals(1, ranked.size());
+        assertEquals(1, eliminated.size());
+        assertTrue(((String) eliminated.getFirst().get("eliminationReason")).contains("价格冲击"));
+    }
+
+    @Test
+    void quoteShouldExposeScoreBreakdownAndFreshnessFields() {
+        when(realPoolService.getSupportedPools()).thenReturn(List.of(WETH_USDC_500));
+        when(realPoolService.quoteExactInputSingle(eq(WETH_USDC_500), eq("WETH"), eq("USDC"), any()))
+                .thenReturn(singleQuoteResult(WETH_USDC_500, "WETH", "USDC", "3100", "3110"));
+
+        Map<String, Object> result = routeService.quote("ETH", "USDC", BigDecimal.ONE);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> best = (Map<String, Object>) result.get("best");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> scoreBreakdown = (Map<String, Object>) best.get("scoreBreakdown");
+
+        assertNotNull(scoreBreakdown);
+        assertNotNull(best.get("lpFeeCostUsd"));
+        assertNotNull(best.get("gasAmount"));
+        assertNotNull(best.get("liquidityDepthScore"));
+        assertEquals("fresh", best.get("quoteFreshness"));
+    }
+
+    private static RealPoolSnapshot pool(String address,
+                                         String name,
+                                         String token0,
+                                         String token1,
+                                         int fee,
+                                         String priceToken0InToken1,
+                                         String priceToken1InToken0,
+                                         String reserve0,
+                                         String reserve1,
+                                         String liquidity) {
+        return RealPoolSnapshot.builder()
+                .poolAddress(address)
+                .poolName(name)
+                .dex("Uniswap V3")
+                .token0Symbol(token0)
+                .token1Symbol(token1)
+                .token0Address("0x" + token0.toLowerCase())
+                .token1Address("0x" + token1.toLowerCase())
+                .token0Decimals("WETH".equals(token0) ? 18 : 6)
+                .token1Decimals("WETH".equals(token1) ? 18 : 6)
+                .fee(fee)
+                .blockNumber(20_000_000L)
+                .blockTimestamp(NOW)
+                .priceToken0InToken1(new BigDecimal(priceToken0InToken1))
+                .priceToken1InToken0(new BigDecimal(priceToken1InToken0))
+                .reserve0(new BigDecimal(reserve0))
+                .reserve1(new BigDecimal(reserve1))
+                .liquidity(new BigDecimal(liquidity))
+                .build();
+    }
+
+    private static Map<String, Object> singleQuoteResult(RealPoolSnapshot pool,
+                                                         String tokenIn,
+                                                         String tokenOut,
+                                                         String amountOut,
+                                                         String grossAmountOut) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("supported", true);
+        data.put("tokenIn", tokenIn);
+        data.put("tokenOut", tokenOut);
+        data.put("amountIn", BigDecimal.ONE);
+        data.put("amountOut", new BigDecimal(amountOut));
+        data.put("grossAmountOut", new BigDecimal(grossAmountOut));
+        data.put("priceImpactPct", priceImpact(amountOut, grossAmountOut));
+        data.put("poolAddress", pool.getPoolAddress());
+        data.put("poolName", pool.getPoolName());
+        data.put("fee", pool.getFee());
+        data.put("blockNumber", pool.getBlockNumber());
+        data.put("blockTimestamp", NOW);
+        data.put("source", "uniswap-v3-quoter-v1");
+        data.put("dex", pool.getDex());
+        return data;
+    }
+
+    private static BigDecimal priceImpact(String amountOut, String grossAmountOut) {
+        BigDecimal actual = new BigDecimal(amountOut);
+        BigDecimal gross = new BigDecimal(grossAmountOut);
+        return gross.subtract(actual)
+                .divide(gross, 8, java.math.RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"))
+                .setScale(6, java.math.RoundingMode.HALF_UP);
+    }
+
+    private static org.mockito.ArgumentMatcher<BigDecimal> amountEq(String expected) {
+        BigDecimal value = new BigDecimal(expected);
+        return amount -> amount != null && amount.compareTo(value) == 0;
     }
 }

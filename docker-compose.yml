@@ -58,6 +58,139 @@ services:
     ports:
       - "2181:2181"
 
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    container_name: dex-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: dex-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 2; done;
+      /usr/bin/mc mb -p local/dex-metrics || true;
+      /usr/bin/mc anonymous set private local/dex-metrics || true;
+      exit 0;
+      "
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: dex-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: dex-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  thanos-sidecar:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: dex-thanos-sidecar
+    command:
+      - sidecar
+      - --tsdb.path=/prometheus
+      - --prometheus.url=http://prometheus:9090
+      - --grpc-address=0.0.0.0:10901
+      - --http-address=0.0.0.0:10902
+      - --objstore.config-file=/etc/thanos/object-store.yml
+    depends_on:
+      - prometheus
+      - minio-init
+    volumes:
+      - ./monitoring/thanos/object-store.yml:/etc/thanos/object-store.yml:ro
+      - prometheus_data:/prometheus
+
+  thanos-store:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: dex-thanos-store
+    command:
+      - store
+      - --data-dir=/var/thanos/store
+      - --grpc-address=0.0.0.0:10901
+      - --http-address=0.0.0.0:10902
+      - --objstore.config-file=/etc/thanos/object-store.yml
+    depends_on:
+      - minio-init
+    volumes:
+      - ./monitoring/thanos/object-store.yml:/etc/thanos/object-store.yml:ro
+
+  thanos-compactor:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: dex-thanos-compactor
+    command:
+      - compact
+      - --data-dir=/var/thanos/compact
+      - --objstore.config-file=/etc/thanos/object-store.yml
+      - --http-address=0.0.0.0:10902
+      - --wait
+    depends_on:
+      - minio-init
+    volumes:
+      - ./monitoring/thanos/object-store.yml:/etc/thanos/object-store.yml:ro
+
+  thanos-query:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: dex-thanos-query
+    command:
+      - query
+      - --http-address=0.0.0.0:9090
+      - --grpc-address=0.0.0.0:10901
+      - --store=thanos-sidecar:10901
+      - --store=thanos-store:10901
+    depends_on:
+      - thanos-sidecar
+      - thanos-store
+    ports:
+      - "10903:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: dex-grafana
+    depends_on:
+      - prometheus
+      - thanos-query
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   mysql_data:
   redis_data:
+  minio_data:
+  prometheus_data:

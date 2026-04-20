@@ -68,10 +68,12 @@ class StatisticsServiceTest {
         Map<String, Object> overview = statisticsService.getOverview();
 
         Map<?, ?> market = (Map<?, ?>) overview.get("market");
+        Map<?, ?> metricBoundary = (Map<?, ?>) overview.get("metricBoundary");
         assertEquals(1, market.get("poolCount"));
         assertEquals(1, market.get("pricePairCount"));
         assertEquals(new BigDecimal("2400000.00"), overview.get("totalTvlUsdEstimate"));
         assertFalse(((List<?>) overview.get("highlights")).isEmpty());
+        assertFalse(((List<?>) metricBoundary.get("included")).isEmpty());
         assertNotNull(overview.get("stageSummary"));
 
         verify(dataCacheService).put(eq("dex:stats:overview:v1"), eq(overview), any(Duration.class));
