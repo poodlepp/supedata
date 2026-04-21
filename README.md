@@ -3,7 +3,7 @@
 [![Language: English](https://img.shields.io/badge/Language-English-0A66C2)](./README.md)
 [![语言：中文](https://img.shields.io/badge/语言-中文-0A66C2)](./README.zh-CN.md)
 
-A staged DEX backend practice project focused on building a real, explainable data and routing pipeline instead of a mock demo. The repository currently delivers a working Stage 0-5 loop: indexing, derived data, routing, realtime ops, and a production-style local monitoring stack.
+A DEX backend practice project built around real mainnet-backed data. The repository currently covers Stage 0-5: indexing, derived data, routing, realtime ops, and a production-style local monitoring stack.
 
 ## At a Glance
 
@@ -16,22 +16,7 @@ A staged DEX backend practice project focused on building a real, explainable da
 - **Backend**: Spring Boot multi-module service
 - **Ops stack**: Prometheus, Grafana, Alertmanager, Thanos, MinIO
 
-## What This Project Is
-
-- A backend-focused DEX practice project built around real mainnet-backed data
-- A staged learning repo that emphasizes indexing, serving, routing, replay, and observability
-- A system that tries to make route selection and operational state explainable
-
-## What This Project Is Not
-
-- Not a full-featured production aggregator
-- Not a multi-chain or multi-protocol platform yet
-- Not a live trading bot or MEV executor
-- Not a fake dashboard driven by fabricated metrics
-
-## Why This Project Exists
-
-This project is designed to practice the core knowledge areas behind a DEX data backend:
+## Focus Areas
 
 - **On-chain ingestion**: blocks, logs, checkpoints, reorg window handling
 - **Protocol normalization**: turning raw Uniswap V3 events into stable internal models
@@ -78,17 +63,6 @@ This project is designed to practice the core knowledge areas behind a DEX data 
 - historical backtesting exports
 - production-grade HA deployment
 - live MEV execution
-
-## Product Surfaces
-
-The repository is easier to understand if you view it as three connected product surfaces:
-
-- **Data surface**
-  - prices, liquidity pools, statistics overview
-- **Routing surface**
-  - quote, compare, split-route analysis, route explanation fields
-- **Ops surface**
-  - overview snapshots, SSE streaming, replay, monitoring dashboards
 
 ## Knowledge Map
 
@@ -205,25 +179,12 @@ The monitoring setup follows a **production-style local topology**:
 
 This is **not** a true HA production cluster. It is a single-node topology designed to expose the right architectural boundaries.
 
-## What Makes It Interesting
+## Design Docs
 
-- Real mainnet-backed pricing and quoting instead of fabricated demo data
-- Explainable route ranking with gas, fee, split-route, and freshness considerations
-- Replay and ops surfaces that move the project beyond a basic CRUD/indexer demo
-- Monitoring architecture that separates metric production, scraping, alerting, storage, and visualization
-
-## Architecture Entry Points
-
-- High-level staged design:
+- Staged architecture and implementation notes:
   - [dex-aggregator-architecture.md](./dex-aggregator-architecture.md)
 - MEV / arbitrage system sketch:
   - [docs/mev-arbitrage-architecture.md](./docs/mev-arbitrage-architecture.md)
-
-## Architecture Document
-
-For the staged design and implementation details, see:
-
-- [dex-aggregator-architecture.md](./dex-aggregator-architecture.md)
 
 ## Practical Notes
 
