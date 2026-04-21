@@ -16,6 +16,12 @@
 - **后端**：Spring Boot 多模块服务
 - **运维栈**：Prometheus、Grafana、Alertmanager、Thanos、MinIO
 
+## 页面截图
+
+| Dashboard | Route Demo | Monitor |
+|---|---|---|
+| ![Dashboard](files/img.png) | ![Route Demo](files/img_1.png) | ![Monitor](files/img_2.png) |
+
 ## 重点知识点
 
 - **链上数据接入**：区块、日志、checkpoint、reorg window

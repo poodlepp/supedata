@@ -16,9 +16,11 @@ A DEX backend practice project built around real mainnet-backed data. The reposi
 - **Backend**: Spring Boot multi-module service
 - **Ops stack**: Prometheus, Grafana, Alertmanager, Thanos, MinIO
 
-![img.png](files/img.png)
-![img_1.png](files/img_1.png)
-![img.png](files/img_2.png)
+## Screenshots
+
+| Dashboard | Route Demo | Monitor |
+|---|---|---|
+| ![Dashboard](files/img.png) | ![Route Demo](files/img_1.png) | ![Monitor](files/img_2.png) |
 
 ## Focus Areas
 
