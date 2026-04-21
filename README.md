@@ -1,98 +1,120 @@
-# DEX Aggregator Platform
+# DEX Aggregator Backend Practice Project
 
-一个按阶段持续落地的 DEX 数据聚合平台，当前已经完成 **阶段 0-5 的真实可用闭环**。
+[![Language: English](https://img.shields.io/badge/Language-English-0A66C2)](./README.md)
+[![语言：中文](https://img.shields.io/badge/语言-中文-0A66C2)](./README.zh-CN.md)
 
-## 当前真实支持范围
+A staged DEX backend practice project focused on building a real, explainable data and routing pipeline instead of a mock demo. The repository currently delivers a working Stage 0-5 loop: indexing, derived data, routing, realtime ops, and a production-style local monitoring stack.
 
-- **链**：Ethereum Mainnet
-- **协议**：Uniswap V3
-- **交易对**：ETH/USDC、ETH/DAI
-- **价格来源**：主网真实池状态
-- **报价来源**：Uniswap V3 Quoter
+## At a Glance
 
-## 阶段状态
+- **Chain**: Ethereum Mainnet
+- **Protocol**: Uniswap V3
+- **Pairs in scope**: `ETH/USDC`, `ETH/DAI`, `DAI/USDC`
+- **Pricing source**: real mainnet pool state
+- **Quote source**: Uniswap V3 Quoter
+- **Frontend**: Vue 3 verification console
+- **Backend**: Spring Boot multi-module service
+- **Ops stack**: Prometheus, Grafana, Alertmanager, Thanos, MinIO
 
-### 已完成
-- **阶段 0：工程底座**
-  - Maven 多模块结构
-  - Docker Compose 基础依赖
-  - `actuator/health`
-  - 初始化 SQL / 启动脚本
-- **阶段 1：单链读链与原始同步**
-  - Ethereum Mainnet 连接检查
-  - 最新区块读取
-  - 主网池状态读取
-- **阶段 2：DEX 协议索引与标准化**
-  - UniV3 Pool 事件索引与入库
-  - checkpoint / reorg window
-  - 同池内按 `block -> tx -> log` 顺序落库
-- **阶段 3：派生指标与数据服务**
-  - 真实价格接口
-  - 真实流动性池接口
-  - 真实统计概览接口
-  - 移除伪 volume 输出
-- **阶段 4：报价与路由引擎**
-  - `/api/v1/routes/quote`
-  - ETH/USDC、ETH/DAI 真实报价
-  - 返回路径、pool、fee、滑点、块高等元信息
-- **阶段 5：实时化与运维能力**
-  - `/api/v1/ops/overview`
-  - `/api/v1/ops/stream/prices`
-  - `/api/v1/ops/replay`
-  - Prometheus 指标与运维监控页
+## Why This Project Exists
 
-### 未完成
-- **阶段 6**：多链、多协议、历史回测导出
+This project is designed to practice the core knowledge areas behind a DEX data backend:
 
-## Review 文档
+- **On-chain ingestion**: blocks, logs, checkpoints, reorg window handling
+- **Protocol normalization**: turning raw Uniswap V3 events into stable internal models
+- **Serving layer design**: prices, liquidity views, statistics, route snapshots
+- **Routing and quoting**: multi-candidate search, gas/slippage-aware ranking, explainable route selection
+- **Realtime operations**: SSE, replay, monitoring, alerting, observability
 
-详细设计说明见：
+## Current Stage Coverage
 
-- `dex-aggregator-architecture.md`
+### Completed
 
-历史、已归档的 Sepolia / Demo 文档见：
+- **Stage 0. Engineering foundation**
+  - Maven multi-module structure
+  - Docker Compose base dependencies
+  - health endpoints
+  - bootstrap SQL and startup scripts
+- **Stage 1. Single-chain access and raw sync**
+  - Ethereum mainnet connectivity checks
+  - latest block access
+  - real pool state reads
+- **Stage 2. DEX protocol indexing and normalization**
+  - Uniswap V3 pool event indexing
+  - checkpoint and reorg window
+  - deterministic event ordering by `block -> tx -> log`
+- **Stage 3. Derived metrics and data services**
+  - real price APIs
+  - liquidity pool APIs
+  - statistics overview APIs
+  - removed fake volume output
+- **Stage 4. Quote and routing engine**
+  - route quote and compare APIs
+  - layered beam-search candidate expansion
+  - gas, fee, price impact, freshness, split-route comparison
+- **Stage 5. Realtime ops and monitoring**
+  - ops overview, SSE price stream, replay entry
+  - Prometheus metrics
+  - Grafana dashboards
+  - Alertmanager and Thanos local topology
 
-- `docs/archive/legacy-sepolia-demo/`
+### Intentionally Not in Scope Yet
 
-## 项目结构
+- multi-chain support
+- multi-protocol plugin architecture
+- historical backtesting exports
+- production-grade HA deployment
+- live MEV execution
+
+## Knowledge Map
+
+| Domain | Practiced in this repo |
+|---|---|
+| Blockchain backend basics | block scanning, RPC integration, event ingestion |
+| Data modeling | normalized pool/event models, serving-layer snapshots |
+| Search and ranking | route candidate generation, pruning, scoring |
+| Realtime systems | Kafka, SSE, scheduled refresh, replay |
+| Backend engineering | caching, API layering, tests, replay safety |
+| Observability | metrics, alerts, dashboards, long-term metrics topology |
+
+## Repository Structure
 
 ```text
 supedata/
-├── dex-api/
-├── dex-business/
-├── dex-common/
-├── dex-data/
-├── dex-infrastructure/
-├── dex-frontend/
-├── docs/
+├── dex-api/                 # REST controllers, actuator, ops endpoints
+├── dex-business/            # routing, pricing, statistics, domain services
+├── dex-common/              # shared models and utilities
+├── dex-data/                # data access layer
+├── dex-infrastructure/      # blockchain clients, scheduler, monitoring, Kafka
+├── dex-frontend/            # Vue verification console
+├── monitoring/              # Prometheus / Grafana / Thanos / Alertmanager config
+├── sql/                     # SQL initialization scripts
 ├── docker-compose.yml
 ├── init-db.sql
-├── sql/
-├── start.sh
-└── pom.xml
+└── dex-aggregator-architecture.md
 ```
 
-## 启动方式
+## Quick Start
 
-### 1）启动基础设施
+### 1. Start infrastructure
 
 ```bash
 docker compose up -d
 ```
 
-### 2）初始化 UniV3 表结构（如尚未创建）
+### 2. Initialize Uniswap V3 tables if needed
 
 ```bash
 docker exec -i dex-mysql mysql -uroot -proot dex_db < sql/univ3_indexer_init.sql
 ```
 
-### 3）启动后端
+### 3. Start backend
 
 ```bash
 /Applications/IntelliJ\ IDEA.app/Contents/plugins/maven/lib/maven3/bin/mvn -pl dex-api spring-boot:run
 ```
 
-### 4）启动前端
+### 4. Start frontend
 
 ```bash
 cd dex-frontend
@@ -100,38 +122,72 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-## 当前接口
+## Core APIs
 
-- 健康检查：`/actuator/health`
-- 价格：`/api/v1/prices`
-- 流动性池：`/api/v1/liquidity/pools`
-- 统计概览：`/api/v1/statistics/overview`
-- 报价：`/api/v1/routes/quote?from=ETH&to=USDC&amountIn=1`
-- 运维总览：`/api/v1/ops/overview`
-- 实时 SSE：`/api/v1/ops/stream/prices`
-- 手动回放：`/api/v1/ops/replay?fromBlock=...`
-- Prometheus：`/actuator/prometheus`
-- Prometheus UI：`http://localhost:9090`
-- UniV3 索引：`/api/univ3/*`
+### Data APIs
 
-## 监控栈
+- `GET /actuator/health`
+- `GET /api/v1/prices`
+- `GET /api/v1/liquidity/pools`
+- `GET /api/v1/statistics/overview`
 
-- Grafana：`http://localhost:3000`，负责看板、告警可视化和多数据源查询入口
-- Prometheus：`http://localhost:9090`，负责抓取 Spring Boot `/actuator/prometheus` 指标、规则计算和告警触发
-- Alertmanager：`http://localhost:9093`，负责 Prometheus 告警聚合、抑制和后续通知分发
-- Thanos Query：`http://localhost:10903`，负责统一查询 Prometheus 实时数据和对象存储中的长期数据
-- MinIO Console：`http://localhost:9001`，负责本地对象存储，承接 Thanos 的长期指标块
+### Routing APIs
 
-## 监控拓扑说明
+- `GET /api/v1/routes/quote?from=ETH&to=USDC&amountIn=1`
+- `GET /api/v1/routes/compare?from=ETH&to=USDC&amountIn=1`
 
-- 当前 `docker compose` 启动的是**本地单机的生产式监控拓扑**：组件职责按生产环境拆开，但不等同于真正的高可用生产集群
-- Spring Boot 应用只暴露 `/actuator/prometheus` 指标端点，不内嵌 Prometheus 采集职责
-- Prometheus 通过 `host.docker.internal:8080` 抓取后端指标，再由 Grafana/Thanos 查询展示
-- 如果后续进入真实生产环境，需要继续补齐多副本、远端对象存储、持久卷治理、告警通知渠道和权限控制
+### Ops APIs
 
-## 注意事项
+- `GET /api/v1/ops/overview`
+- `GET /api/v1/ops/stream/prices`
+- `POST /api/v1/ops/replay?fromBlock=...`
 
-- 当前支持范围是**少量交易对 + 真实主网数据**，不是全量聚合器
-- 为抗 RPC 限流，真实池与真实报价带有短 TTL 缓存
-- `volume` 当前明确不输出伪值
-- 应用只暴露指标端点，Prometheus 通过 `docker compose up -d` 独立启动并抓取 `http://host.docker.internal:8080/actuator/prometheus`
+### Monitoring Endpoints
+
+- `GET /actuator/prometheus`
+- Prometheus UI: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Alertmanager: `http://localhost:9093`
+- Thanos Query: `http://localhost:10903`
+- MinIO Console: `http://localhost:9001`
+
+## Monitoring Stack
+
+The monitoring setup follows a **production-style local topology**:
+
+- **Spring Boot**
+  - exposes metrics through `/actuator/prometheus`
+- **Prometheus**
+  - scrapes application metrics
+  - evaluates alert rules
+  - stores short-to-mid-term local TSDB data
+- **Alertmanager**
+  - groups, suppresses, and routes alerts
+- **Thanos Sidecar / Store / Query / Compactor**
+  - provide a unified query path and long-term metrics architecture
+- **MinIO**
+  - acts as the local S3-compatible object storage for Thanos blocks
+- **Grafana**
+  - visualizes Prometheus/Thanos data through dashboards and Explore
+
+This is **not** a true HA production cluster. It is a single-node topology designed to expose the right architectural boundaries.
+
+## What Makes It Interesting
+
+- Real mainnet-backed pricing and quoting instead of fabricated demo data
+- Explainable route ranking with gas, fee, split-route, and freshness considerations
+- Replay and ops surfaces that move the project beyond a basic CRUD/indexer demo
+- Monitoring architecture that separates metric production, scraping, alerting, storage, and visualization
+
+## Architecture Document
+
+For the staged design and implementation details, see:
+
+- [dex-aggregator-architecture.md](./dex-aggregator-architecture.md)
+
+## Practical Notes
+
+- The current scope is intentionally narrow: a few real trading pairs with real mainnet data
+- Real pool and quote reads use short TTL caching to reduce RPC pressure
+- Fake `volume` output is intentionally excluded
+- Prometheus scrapes the backend from Docker through `http://host.docker.internal:8080/actuator/prometheus`
