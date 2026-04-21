@@ -16,6 +16,19 @@
 - **后端**：Spring Boot 多模块服务
 - **运维栈**：Prometheus、Grafana、Alertmanager、Thanos、MinIO
 
+## 这个项目是什么
+
+- 一个以后端为主、基于真实主网数据的 DEX 练习项目
+- 一个按阶段推进的学习型仓库，重点训练索引、服务、路由、回放和可观测性
+- 一个尽量把“路由为什么这样选、系统当前运行状态如何”解释清楚的系统
+
+## 这个项目不是什么
+
+- 不是完整生产级聚合器
+- 不是多链、多协议平台
+- 不是实盘交易 bot 或 MEV 执行器
+- 不是依赖伪造指标的展示型 dashboard
+
 ## 这个项目在练什么
 
 这个仓库主要覆盖 DEX 后端里最有代表性的知识点：
@@ -66,6 +79,17 @@
 - 真正生产级高可用部署
 - 实盘 MEV 执行
 
+## 产品视角拆分
+
+如果从产品表面来看，这个仓库可以分成三块：
+
+- **数据面**
+  - 价格、池子、统计概览
+- **路由面**
+  - 报价、比较、拆单分析、评分拆解
+- **运维面**
+  - ops 总览、SSE 推送、replay、监控看板
+
 ## 知识点地图
 
 | 方向 | 在项目中的体现 |
@@ -93,6 +117,15 @@ supedata/
 ├── init-db.sql
 └── dex-aggregator-architecture.md
 ```
+
+## 前端页面
+
+- **Dashboard**
+  - 统计概览、阶段摘要、指标边界说明、阶段 3 K 线
+- **Route Demo**
+  - 候选路径比较、评分拆解、拆单比较、淘汰原因
+- **Monitor**
+  - 实时运维总览、SSE 快照、回放记录、监控入口
 
 ## 快速启动
 
@@ -178,6 +211,13 @@ npm run dev -- --host 127.0.0.1 --port 5173
 - 路由结果可解释，能体现 gas、fee、split route、freshness 等因素
 - 具备 replay 和 ops 能力，不只是一个基础 indexer 或 CRUD demo
 - 监控拓扑完整，能体现指标生产、抓取、告警、存储、展示的职责拆分
+
+## 架构阅读入口
+
+- 分阶段主设计文档：
+  - [dex-aggregator-architecture.md](./dex-aggregator-architecture.md)
+- MEV / 套利系统草图：
+  - [docs/mev-arbitrage-architecture.md](./docs/mev-arbitrage-architecture.md)
 
 ## 架构文档
 

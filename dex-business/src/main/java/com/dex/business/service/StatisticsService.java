@@ -29,17 +29,6 @@ public class StatisticsService {
     private final StageStatusService stageStatusService;
     private final DataCacheService dataCacheService;
 
-    public Map<String, Object> getVolume(String pair, String period) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("pair", pair);
-        payload.put("period", period == null || period.isBlank() ? "24h" : period);
-        payload.put("supported", false);
-        payload.put("message", "当前版本不输出伪造 volume；待真实成交量聚合链路完成后开放");
-        payload.put("methodology", "not-implemented-without-real-trade-aggregation");
-        payload.put("generatedAt", System.currentTimeMillis());
-        return payload;
-    }
-
     public Map<String, Object> getOverview() {
         return dataCacheService.get(DASHBOARD_CACHE_KEY, Map.class)
                 .map(this::normalizeOverview)
@@ -57,6 +46,7 @@ public class StatisticsService {
                 .map(this::estimatePoolTvlUsd)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
+        List<String> supportedPairs = pools.stream().map(this::displayPair).toList();
         long latestBlockNumber = pools.stream()
                 .map(RealPoolSnapshot::getBlockNumber)
                 .filter(block -> block != null)
@@ -67,7 +57,7 @@ public class StatisticsService {
         Map<String, Object> overview = new LinkedHashMap<>();
         overview.put("market", marketSummary(pools, prices.size(), totalTvlUsd, latestBlockNumber, generatedAt));
         overview.put("poolCount", pools.size());
-        overview.put("supportedPairs", pools.stream().map(this::displayPair).toList());
+        overview.put("supportedPairs", supportedPairs);
         overview.put("totalTvlUsdEstimate", totalTvlUsd);
         overview.put("prices", prices);
         overview.put("topPools", pools.stream()
@@ -90,7 +80,7 @@ public class StatisticsService {
             return item;
         }).toList());
         overview.put("highlights", highlights(pools, prices.size(), latestBlockNumber, totalTvlUsd));
-        overview.put("volumeBoundary", getVolume("ALL", "24h"));
+        overview.put("metricBoundary", metricBoundary(supportedPairs, generatedAt));
         overview.put("stageSummary", stageStatusService.getSummary());
         overview.put("generatedAt", generatedAt);
         overview.put("cache", Map.of(
@@ -170,6 +160,31 @@ public class StatisticsService {
         item.put("timestamp", price.getTimestamp());
         item.put("source", "ethereum-mainnet-uniswap-v3");
         return item;
+    }
+
+    private Map<String, Object> metricBoundary(List<String> supportedPairs, long generatedAt) {
+        Map<String, Object> boundary = new LinkedHashMap<>();
+        boundary.put("stage", "阶段 3");
+        boundary.put("message", "阶段 3 只保留当前可以由真实池状态和价格历史可靠推导的指标，不输出伪造 24h 成交量或排行榜。");
+        boundary.put("included", List.of(
+                "最新价格快照",
+                "价格历史快照",
+                "简单 K 线",
+                "价格瞬时跳变提示",
+                "池子列表与储备",
+                "TVL 估算",
+                "首页总览缓存快照",
+                "最新块高与同步状态"
+        ));
+        boundary.put("excluded", List.of(
+                Map.of("metric", "24h Volume / 交易笔数", "reason", "当前未建立基于真实 swap_event 的聚合链路"),
+                Map.of("metric", "热门 Token / 涨跌幅排行", "reason", "当前支持交易对过少，且缺少完整时间窗口聚合"),
+                Map.of("metric", "流动性深度分数 / 买卖价差近似值", "reason", "当前只有少量池快照，未建立统一盘口近似模型"),
+                Map.of("metric", "池子活跃度排行", "reason", "当前没有独立的事件统计物化表")
+        ));
+        boundary.put("supportedPairs", supportedPairs);
+        boundary.put("generatedAt", generatedAt);
+        return boundary;
     }
 
     private String displayPair(RealPoolSnapshot pool) {

@@ -16,6 +16,19 @@ A staged DEX backend practice project focused on building a real, explainable da
 - **Backend**: Spring Boot multi-module service
 - **Ops stack**: Prometheus, Grafana, Alertmanager, Thanos, MinIO
 
+## What This Project Is
+
+- A backend-focused DEX practice project built around real mainnet-backed data
+- A staged learning repo that emphasizes indexing, serving, routing, replay, and observability
+- A system that tries to make route selection and operational state explainable
+
+## What This Project Is Not
+
+- Not a full-featured production aggregator
+- Not a multi-chain or multi-protocol platform yet
+- Not a live trading bot or MEV executor
+- Not a fake dashboard driven by fabricated metrics
+
 ## Why This Project Exists
 
 This project is designed to practice the core knowledge areas behind a DEX data backend:
@@ -66,6 +79,17 @@ This project is designed to practice the core knowledge areas behind a DEX data 
 - production-grade HA deployment
 - live MEV execution
 
+## Product Surfaces
+
+The repository is easier to understand if you view it as three connected product surfaces:
+
+- **Data surface**
+  - prices, liquidity pools, statistics overview
+- **Routing surface**
+  - quote, compare, split-route analysis, route explanation fields
+- **Ops surface**
+  - overview snapshots, SSE streaming, replay, monitoring dashboards
+
 ## Knowledge Map
 
 | Domain | Practiced in this repo |
@@ -93,6 +117,15 @@ supedata/
 ├── init-db.sql
 └── dex-aggregator-architecture.md
 ```
+
+## Frontend Pages
+
+- **Dashboard**
+  - statistics overview, stage summary, retained metric boundaries, Stage 3 candle view
+- **Route Demo**
+  - quote comparison, score breakdown, split-route comparison, elimination reasons
+- **Monitor**
+  - realtime ops overview, SSE snapshot, replay history, monitoring stack entry points
 
 ## Quick Start
 
@@ -178,6 +211,13 @@ This is **not** a true HA production cluster. It is a single-node topology desig
 - Explainable route ranking with gas, fee, split-route, and freshness considerations
 - Replay and ops surfaces that move the project beyond a basic CRUD/indexer demo
 - Monitoring architecture that separates metric production, scraping, alerting, storage, and visualization
+
+## Architecture Entry Points
+
+- High-level staged design:
+  - [dex-aggregator-architecture.md](./dex-aggregator-architecture.md)
+- MEV / arbitrage system sketch:
+  - [docs/mev-arbitrage-architecture.md](./docs/mev-arbitrage-architecture.md)
 
 ## Architecture Document
 

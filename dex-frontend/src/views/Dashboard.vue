@@ -69,12 +69,12 @@
             <strong>{{ stageSummary.currentFocus || '-' }}</strong>
           </div>
           <div class="delivery-item">
-            <span>Volume 边界</span>
-            <strong>{{ volumeBoundary.supported ? '已开放' : '未开放' }}</strong>
+            <span>阶段 3 指标边界</span>
+            <strong>{{ metricBoundary.included?.length || 0 }} 项已保留</strong>
           </div>
           <div class="delivery-item full">
             <span>当前说明</span>
-            <p>{{ volumeBoundary.message || '暂无额外说明' }}</p>
+            <p>{{ metricBoundary.message || '暂无额外说明' }}</p>
           </div>
         </div>
 
@@ -154,6 +154,33 @@
           </article>
         </div>
       </article>
+
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow dark">CANDLES</div>
+            <h2>阶段 3 真实 K 线</h2>
+          </div>
+          <span class="muted">{{ candlePair }} · {{ candleIntervalLabel }}</span>
+        </div>
+
+        <div v-if="candles.length" class="candle-panel">
+          <v-chart class="candle-chart" :option="candleOption" autoresize />
+          <div class="candle-meta">
+            <div class="candle-meta-item">
+              <span>最近收盘</span>
+              <strong>{{ formatUsd(lastCandle?.close) }}</strong>
+            </div>
+            <div class="candle-meta-item">
+              <span>最新时间</span>
+              <strong>{{ formatTime(lastCandle?.timestamp) }}</strong>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-note">
+          当前价格历史样本还不足，K 线会在价格快照累积后自动出现。
+        </div>
+      </article>
     </section>
   </div>
 </template>
@@ -161,8 +188,20 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { getOverview } from '../api/statistics'
+import { getCandles } from '../api/price'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { CandlestickChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+
+use([CanvasRenderer, CandlestickChart, GridComponent, TooltipComponent])
 
 const overview = ref({})
+const candles = ref([])
+const candlePair = 'ETH-USDC'
+const candleMinutes = 5
+const candleIntervalLabel = '5m'
 
 const actions = [
   { to: '/blockchain', tag: 'CHAIN', title: '链上索引与事件', description: '查看 RPC 状态、扫链进度和 UniV3 事件分类。' },
@@ -175,15 +214,60 @@ const prices = computed(() => overview.value?.prices || [])
 const topPools = computed(() => overview.value?.topPools || [])
 const stageSummary = computed(() => overview.value?.stageSummary || {})
 const stagePreview = computed(() => stageSummary.value?.stagePreview || [])
-const volumeBoundary = computed(() => overview.value?.volumeBoundary || {})
+const metricBoundary = computed(() => overview.value?.metricBoundary || {})
+const lastCandle = computed(() => candles.value.at(-1) || null)
+const candleOption = computed(() => ({
+  animation: false,
+  grid: { left: 18, right: 18, top: 18, bottom: 24, containLabel: true },
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: { type: 'cross' },
+    valueFormatter: (value) => `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+  },
+  xAxis: {
+    type: 'category',
+    data: candles.value.map(item => formatCandleLabel(item.timestamp)),
+    boundaryGap: true,
+    axisLine: { lineStyle: { color: '#cbd5e1' } },
+    axisLabel: { color: '#64748b', fontSize: 11 }
+  },
+  yAxis: {
+    scale: true,
+    axisLine: { show: false },
+    splitLine: { lineStyle: { color: '#e2e8f0' } },
+    axisLabel: {
+      color: '#64748b',
+      formatter: (value) => `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+    }
+  },
+  series: [{
+    type: 'candlestick',
+    data: candles.value.map(item => [item.open, item.close, item.low, item.high]),
+    itemStyle: {
+      color: '#ea580c',
+      color0: '#0f766e',
+      borderColor: '#ea580c',
+      borderColor0: '#0f766e'
+    }
+  }]
+}))
 
 const formatTime = (value) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
 const formatUsd = (value) => value == null ? '-' : `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
 const formatFee = (value) => value == null ? '-' : `${Number(value) / 10000}%`
+const formatCandleLabel = (value) => new Date(value).toLocaleTimeString('zh-CN', {
+  hour12: false,
+  hour: '2-digit',
+  minute: '2-digit'
+})
 
 const loadDashboard = async () => {
-  const response = await getOverview()
-  overview.value = response.data.data || {}
+  const [overviewRes, candleRes] = await Promise.allSettled([
+    getOverview(),
+    getCandles(candlePair, candleMinutes)
+  ])
+  overview.value = overviewRes.status === 'fulfilled' ? (overviewRes.value.data.data || {}) : {}
+  candles.value = candleRes.status === 'fulfilled' ? (candleRes.value.data.data || []) : []
 }
 
 onMounted(loadDashboard)
@@ -233,6 +317,12 @@ onMounted(loadDashboard)
 .price-card{padding:18px;background:linear-gradient(135deg,#fff7ed 0%,#eff6ff 100%)}
 .price-card strong{display:block;margin-top:10px;font-size:28px;color:#0f172a}
 .price-card small{display:block;margin-top:8px;color:#64748b}
+.candle-panel{display:grid;gap:16px}
+.candle-chart{height:320px;width:100%;border-radius:20px;background:linear-gradient(180deg,#fff7ed 0%,#ffffff 100%)}
+.candle-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.candle-meta-item{padding:16px 18px;border-radius:18px;background:#f8fafc}
+.candle-meta-item strong{display:block;margin-top:8px;font-size:20px;color:#0f172a}
+.empty-note{padding:18px;border-radius:18px;background:#fff7ed;color:#9a3412;line-height:1.7}
 .pool-list{grid-template-columns:1fr}
 .pool-card{padding:20px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff}
 .pool-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
@@ -241,5 +331,5 @@ onMounted(loadDashboard)
 .pool-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
 .pool-metrics strong{display:block;margin-top:8px;font-size:20px}
 @media (max-width:1180px){.summary-grid,.content-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:860px){.hero,.summary-grid,.content-grid,.price-grid,.stage-summary,.delivery-grid,.pool-metrics{grid-template-columns:1fr}.hero-copy h1{font-size:32px}}
+@media (max-width:860px){.hero,.summary-grid,.content-grid,.price-grid,.stage-summary,.delivery-grid,.pool-metrics,.candle-meta{grid-template-columns:1fr}.hero-copy h1{font-size:32px}}
 </style>
