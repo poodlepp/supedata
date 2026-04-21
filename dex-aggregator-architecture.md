@@ -704,6 +704,96 @@ Domain Events
 - 独立死信队列与异常事件归档系统
 - 通用任务编排器和复杂补数工作流
 
+#### 架构图
+
+```mermaid
+flowchart LR
+    subgraph App["应用与数据处理层"]
+        A1["Spring Boot API\n/actuator/prometheus\n/api/v1/ops/overview\n/api/v1/ops/stream/prices\n/api/v1/ops/replay"]
+        A2["Micrometer MeterRegistry\nGauge / Counter / Timer / Summary"]
+        A3["业务服务\nRouteService / PriceService / OpsService"]
+        A4["Kafka"]
+        A5["Redis / MySQL"]
+    end
+
+    subgraph Obs["监控与查询层"]
+        P["Prometheus\n抓取 / 规则计算 / 本地 TSDB"]
+        AM["Alertmanager\n告警聚合 / 静默 / 路由"]
+        TS["Thanos Sidecar\n实时 StoreAPI + block 上传"]
+        TQ["Thanos Query\n统一查询入口"]
+        TST["Thanos Store\n历史 block 查询"]
+        TC["Thanos Compactor\n历史 block 合并整理"]
+        M["MinIO\nS3 兼容对象存储"]
+        G["Grafana\nDashboard / Explore / Datasource Proxy"]
+    end
+
+    subgraph Users["使用入口"]
+        U1["前端 Monitor 页"]
+        U2["运维 / 开发者"]
+    end
+
+    A3 --> A2
+    A3 --> A4
+    A3 --> A5
+    A2 --> A1
+    A1 -- "GET /actuator/prometheus" --> P
+    P -- "告警事件" --> AM
+    P -- "共享 TSDB + Prometheus 元信息" --> TS
+    TS -- "上传 TSDB block" --> M
+    M --> TST
+    M --> TC
+    TS -- "StoreAPI gRPC" --> TQ
+    TST -- "StoreAPI gRPC" --> TQ
+    G -- "PromQL / Range Query" --> TQ
+    G -. "排障时可直连" .-> P
+    U1 --> G
+    U2 --> G
+    U2 --> AM
+    U2 --> P
+```
+
+#### 数据流拆解
+
+**1. 指标产生**
+
+- 业务服务在处理报价、价格刷新、回放、SSE 订阅等流程时，把指标写入 `Micrometer MeterRegistry`
+- 应用通过 `/actuator/prometheus` 暴露指标文本，供 `Prometheus` 主动抓取
+
+**2. 实时查询链**
+
+- `Prometheus` 定时抓取 `Spring Boot` 指标并写入本地 TSDB
+- `Thanos Sidecar` 读取同一份 TSDB，并向 `Thanos Query` 暴露实时 `StoreAPI`
+- `Grafana` 默认查询 `Thanos Query`，因此既能查实时数据，也为后续历史数据扩展保留统一入口
+
+**3. 历史查询链**
+
+- `Thanos Sidecar` 把 Prometheus 生成的 TSDB block 上传到 `MinIO`
+- `Thanos Store` 从 `MinIO` 加载历史 block
+- `Thanos Query` 同时聚合 `Sidecar` 的实时数据和 `Store` 的历史数据，对 Grafana 暴露一套统一 PromQL 查询入口
+
+**4. 告警链**
+
+- `Prometheus` 根据规则文件计算告警条件
+- 告警命中后推送给 `Alertmanager`
+- `Alertmanager` 负责聚合、静默和后续通知路由
+
+**5. 页面与接口链**
+
+- 前端 `Monitor` 页面一部分数据直接走业务接口：
+  - `/api/v1/ops/overview`
+  - `/api/v1/ops/stream/prices`
+  - `/api/v1/ops/replay`
+- 更偏基础设施的指标、趋势和聚合图表由 `Grafana -> Thanos Query` 负责展示
+
+#### 关键配置落点
+
+- `Spring Boot` 指标暴露：`dex-api/src/main/resources/application.yml`
+- `Prometheus` 抓取与规则：`monitoring/prometheus/prometheus.yml`
+- `Alertmanager` 路由：`monitoring/alertmanager/alertmanager.yml`
+- `Thanos` 对象存储：`monitoring/thanos/object-store.yml`
+- `Grafana` 数据源：`monitoring/grafana/provisioning/datasources/datasources.yml`
+- 监控栈编排：`docker-compose.yml`
+
 #### 交付物
 
 - `/api/v1/ops/overview`
