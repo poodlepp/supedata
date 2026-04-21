@@ -91,6 +91,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.min-block-duration=2h"
+      - "--storage.tsdb.max-block-duration=2h"
       - "--web.enable-lifecycle"
     ports:
       - "9090:9090"
@@ -142,6 +144,7 @@ services:
       - minio-init
     volumes:
       - ./monitoring/thanos/object-store.yml:/etc/thanos/object-store.yml:ro
+      - thanos_store_data:/var/thanos/store
 
   thanos-compactor:
     image: quay.io/thanos/thanos:v0.35.1
@@ -156,6 +159,7 @@ services:
       - minio-init
     volumes:
       - ./monitoring/thanos/object-store.yml:/etc/thanos/object-store.yml:ro
+      - thanos_compactor_data:/var/thanos/compact
 
   thanos-query:
     image: quay.io/thanos/thanos:v0.35.1
@@ -194,3 +198,5 @@ volumes:
   redis_data:
   minio_data:
   prometheus_data:
+  thanos_store_data:
+  thanos_compactor_data:
