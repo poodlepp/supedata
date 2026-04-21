@@ -704,52 +704,80 @@ Domain Events
 - 独立死信队列与异常事件归档系统
 - 通用任务编排器和复杂补数工作流
 
-#### 架构图
+#### 部署拓扑图
+
+```mermaid
+flowchart TB
+    subgraph Client["访问入口"]
+        FE["Monitor 页面"]
+        OPS["运维 / 开发者"]
+    end
+
+    subgraph App["应用层"]
+        API["Spring Boot API"]
+        METRICS["/actuator/prometheus"]
+        OPSAPI["/api/v1/ops/*"]
+        CORE["RouteService / PriceService / OpsService"]
+        KAFKA["Kafka"]
+        STORE["MySQL / Redis"]
+    end
+
+    subgraph Monitor["监控层"]
+        PROM["Prometheus"]
+        ALERT["Alertmanager"]
+        GRAF["Grafana"]
+    end
+
+    subgraph LongTerm["长期存储与统一查询层"]
+        SIDE["Thanos Sidecar"]
+        QUERY["Thanos Query"]
+        TSTORE["Thanos Store"]
+        COMPACTOR["Thanos Compactor"]
+        MINIO["MinIO"]
+    end
+
+    CORE --> KAFKA
+    CORE --> STORE
+    CORE --> METRICS
+    API --> METRICS
+    API --> OPSAPI
+
+    FE --> OPSAPI
+    FE --> GRAF
+    OPS --> GRAF
+    OPS --> PROM
+    OPS --> ALERT
+
+    PROM --> ALERT
+    PROM --> SIDE
+    SIDE --> QUERY
+    TSTORE --> QUERY
+    QUERY --> GRAF
+    SIDE --> MINIO
+    MINIO --> TSTORE
+    MINIO --> COMPACTOR
+```
+
+#### 指标与告警数据流图
 
 ```mermaid
 flowchart LR
-    subgraph App["应用与数据处理层"]
-        A1["Spring Boot API\n/actuator/prometheus\n/api/v1/ops/overview\n/api/v1/ops/stream/prices\n/api/v1/ops/replay"]
-        A2["Micrometer MeterRegistry\nGauge / Counter / Timer / Summary"]
-        A3["业务服务\nRouteService / PriceService / OpsService"]
-        A4["Kafka"]
-        A5["Redis / MySQL"]
-    end
+    S1["业务请求 / 定时任务"] --> S2["业务服务更新 Micrometer 指标"]
+    S2 --> S3["Spring Boot 暴露 /actuator/prometheus"]
+    S3 --> S4["Prometheus 定时抓取"]
+    S4 --> S5["Prometheus 本地 TSDB"]
 
-    subgraph Obs["监控与查询层"]
-        P["Prometheus\n抓取 / 规则计算 / 本地 TSDB"]
-        AM["Alertmanager\n告警聚合 / 静默 / 路由"]
-        TS["Thanos Sidecar\n实时 StoreAPI + block 上传"]
-        TQ["Thanos Query\n统一查询入口"]
-        TST["Thanos Store\n历史 block 查询"]
-        TC["Thanos Compactor\n历史 block 合并整理"]
-        M["MinIO\nS3 兼容对象存储"]
-        G["Grafana\nDashboard / Explore / Datasource Proxy"]
-    end
+    S5 --> S6["Prometheus 规则计算"]
+    S6 --> S7["Alertmanager 聚合 / 路由"]
 
-    subgraph Users["使用入口"]
-        U1["前端 Monitor 页"]
-        U2["运维 / 开发者"]
-    end
+    S5 --> S8["Thanos Sidecar 读取实时 TSDB"]
+    S8 --> S9["Thanos Query 聚合实时查询"]
+    S8 --> S10["上传 block 到 MinIO"]
+    S10 --> S11["Thanos Store 读取历史 block"]
+    S11 --> S9
 
-    A3 --> A2
-    A3 --> A4
-    A3 --> A5
-    A2 --> A1
-    A1 -- "GET /actuator/prometheus" --> P
-    P -- "告警事件" --> AM
-    P -- "共享 TSDB + Prometheus 元信息" --> TS
-    TS -- "上传 TSDB block" --> M
-    M --> TST
-    M --> TC
-    TS -- "StoreAPI gRPC" --> TQ
-    TST -- "StoreAPI gRPC" --> TQ
-    G -- "PromQL / Range Query" --> TQ
-    G -. "排障时可直连" .-> P
-    U1 --> G
-    U2 --> G
-    U2 --> AM
-    U2 --> P
+    S9 --> S12["Grafana Dashboard / Explore"]
+    S4 -. "排障时可直查" .-> S12
 ```
 
 #### 数据流拆解
@@ -784,6 +812,12 @@ flowchart LR
   - `/api/v1/ops/stream/prices`
   - `/api/v1/ops/replay`
 - 更偏基础设施的指标、趋势和聚合图表由 `Grafana -> Thanos Query` 负责展示
+
+#### 图的阅读方式
+
+- 先看“部署拓扑图”：解决“有哪些服务、谁依赖谁、Grafana 为什么不直接查应用”
+- 再看“指标与告警数据流图”：解决“一个指标从 Java 代码出来后，怎么进入 Prometheus、怎么进 Thanos、最后怎么在 Grafana 展示”
+- 这样把“组件职责”和“时序流转”拆开后，阅读负担会比单张混合图低很多
 
 #### 关键配置落点
 
